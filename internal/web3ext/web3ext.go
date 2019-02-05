@@ -32,7 +32,7 @@ var Modules = map[string]string{
 	"txpool":     TxPool_JS,
 	"raft":       Raft_JS,
 	"istanbul":   Istanbul_JS,
-	"zsc":        ZSC_JS,
+	"zether":     ZETHER_JS,
 }
 
 const Chequebook_JS = `
@@ -729,29 +729,29 @@ web3._extend({
 });
 `
 
-const ZSC_JS = `
+const ZETHER_JS = `
 web3._extend({
-	property: 'zsc',
+	property: 'zether',
 	methods:
 	[
 		new web3._extend.Method({
 			name: 'createAccount',
-			call: 'zsc_createAccount',
+			call: 'zether_createAccount',
 			params: 0
 		}),
 		new web3._extend.Method({
 			name: 'readBalance',
-			call: 'zsc_readBalance',
+			call: 'zether_readBalance',
 			params: 3
 		}),
 		new web3._extend.Method({
 			name: 'createTransfer',
-			call: 'zsc_createTransfer',
+			call: 'zether_createTransfer',
 			params: 7
 		}),
 		new web3._extend.Method({
 			name: 'createBurn',
-			call: 'zsc_createBurn',
+			call: 'zether_createBurn',
 			params: 6
 		}),
 	]

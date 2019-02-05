@@ -38,7 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/core/zsc"
+	"github.com/ethereum/go-ethereum/core/zether"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/filters"
@@ -325,9 +325,9 @@ func (s *Ethereum) APIs() []rpc.API {
 			Public:    true,
 		},
 		{
-			Namespace: "zsc",
+			Namespace: "zether",
 			Version:   "1.0",
-			Service:   zsc.NewPublicZSCAPI(),
+			Service:   zether.NewPublicZetherAPI(),
 			Public:    true,
 		},
 	}...)
