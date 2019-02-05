@@ -32,6 +32,7 @@ var Modules = map[string]string{
 	"txpool":     TxPool_JS,
 	"raft":       Raft_JS,
 	"istanbul":   Istanbul_JS,
+	"zsc":        ZSC_JS,
 }
 
 const Chequebook_JS = `
@@ -723,6 +724,35 @@ web3._extend({
 		new web3._extend.Property({
 			name: 'candidates',
 			getter: 'istanbul_candidates'
+		}),
+	]
+});
+`
+
+const ZSC_JS = `
+web3._extend({
+	property: 'zsc',
+	methods:
+	[
+		new web3._extend.Method({
+			name: 'createAccount',
+			call: 'zsc_createAccount',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: 'readBalance',
+			call: 'zsc_readBalance',
+			params: 3
+		}),
+		new web3._extend.Method({
+			name: 'createTransfer',
+			call: 'zsc_createTransfer',
+			params: 7
+		}),
+		new web3._extend.Method({
+			name: 'createBurn',
+			call: 'zsc_createBurn',
+			params: 6
 		}),
 	]
 });

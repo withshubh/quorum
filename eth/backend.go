@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/core/zsc"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/filters"
@@ -323,6 +324,12 @@ func (s *Ethereum) APIs() []rpc.API {
 			Service:   s.netRPCService,
 			Public:    true,
 		},
+		{
+			Namespace: "zsc",
+			Version:   "1.0",
+			Service:   zsc.NewPublicZSCAPI(),
+			Public:    true,
+		},
 	}...)
 }
 
@@ -362,7 +369,6 @@ func (s *Ethereum) SetEtherbase(etherbase common.Address) {
 		return
 	}
 	s.etherbase = etherbase
-
 
 	s.miner.SetEtherbase(etherbase)
 }
