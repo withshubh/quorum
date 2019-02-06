@@ -62,6 +62,23 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	return 0, errors.New("Balance decryption failed!")
 }
 
+func (api *PublicZetherAPI) Add(aBytes [2]common.Hash, bBytes [2]common.Hash) ([2]common.Hash, error) {
+	A := new(bn256.G1)
+	if _, err := A.Unmarshal(append(aBytes[0].Bytes(), aBytes[1].Bytes()...)); err != nil {
+		return [2]common.Hash{common.BytesToHash(make([]byte, 32)), common.BytesToHash(make([]byte, 32))}, err
+	}
+	B := new(bn256.G1)
+	if _, err := B.Unmarshal(append(bBytes[0].Bytes(), bBytes[1].Bytes()...)); err != nil {
+		return [2]common.Hash{common.BytesToHash(make([]byte, 32)), common.BytesToHash(make([]byte, 32))}, err
+	}
+
+	sum := new(bn256.G1)
+	sum.Add(A, B)
+	sumBytes := sum.Marshal()
+
+	return [2]common.Hash{common.BytesToHash(sumBytes[:32]), common.BytesToHash(sumBytes[32:])}, nil
+}
+
 func (api *PublicZetherAPI) ProveTransfer(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, yBar [2]common.Hash, x common.Hash, bTransfer float64, bDiff float64) (common.Proof, error) {
 	bTransferBytes := make([]byte, 32)
 	bDiffBytes := make([]byte, 32)

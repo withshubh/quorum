@@ -754,6 +754,11 @@ web3._extend({
 			call: 'zether_proveBurn',
 			params: 6
 		}),
+		new web3._extend.Method({
+			name: 'add',
+			call: 'zether_add',
+			params: 2
+		})
 	]
 });
 `
