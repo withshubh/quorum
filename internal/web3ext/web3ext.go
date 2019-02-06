@@ -742,7 +742,7 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'readBalance',
 			call: 'zether_readBalance',
-			params: 3
+			params: 5
 		}),
 		new web3._extend.Method({
 			name: 'createTransfer',
