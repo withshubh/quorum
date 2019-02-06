@@ -62,8 +62,7 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	return 0, errors.New("Balance decryption failed!")
 }
 
-func (api *PublicZetherAPI) CreateTransfer(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, yBar [2]common.Hash, x common.Hash, bTransfer float64, bDiff float64) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
+func (api *PublicZetherAPI) ProveTransfer(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, yBar [2]common.Hash, x common.Hash, bTransfer float64, bDiff float64) (common.Proof, error) {
 	bTransferBytes := make([]byte, 32)
 	bDiffBytes := make([]byte, 32)
 	binary.PutUvarint(bTransferBytes, uint64(bTransfer))
@@ -72,11 +71,10 @@ func (api *PublicZetherAPI) CreateTransfer(CL [2]common.Hash, CR [2]common.Hash,
 
 	// java.createTransfer(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), append(yBar[0].Bytes(), yBar[1].Bytes()...), x.Bytes(), bTransferBytes, bDiffBytes)
 
-	return result, nil
+	return []byte{0x00, 0x01, 0x02, 0x03}, nil
 }
 
-func (api *PublicZetherAPI) CreateBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer float64, x common.Hash, bDiff float64) (map[string]interface{}, error) {
-	result := make(map[string]interface{})
+func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer float64, x common.Hash, bDiff float64) (common.Proof, error) {
 	bTransferBytes := make([]byte, 32)
 	bDiffBytes := make([]byte, 32)
 	binary.PutUvarint(bTransferBytes, uint64(bTransfer))
@@ -85,5 +83,5 @@ func (api *PublicZetherAPI) CreateBurn(CL [2]common.Hash, CR [2]common.Hash, y [
 
 	// java.createTransfer(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), bTransferBytes, x.Bytes(), bDiffBytes)
 
-	return result, nil
+	return []byte{0x05, 0x06, 0x07, 0x08}, nil
 }

@@ -745,13 +745,13 @@ web3._extend({
 			params: 5
 		}),
 		new web3._extend.Method({
-			name: 'createTransfer',
-			call: 'zether_createTransfer',
+			name: 'proveTransfer',
+			call: 'zether_proveTransfer',
 			params: 7
 		}),
 		new web3._extend.Method({
-			name: 'createBurn',
-			call: 'zether_createBurn',
+			name: 'proveBurn',
+			call: 'zether_proveBurn',
 			params: 6
 		}),
 	]
