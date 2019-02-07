@@ -113,7 +113,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]com
 
 	// proof := java.proveTransfer(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), append(yBar[0].Bytes(), yBar[1].Bytes()...), x.Bytes(), r.Bytes(), bTransfer.Bytes(), bDiff.Bytes())
 	// warning: calling .Bytes() could yeild a slice of < 32 length. make sure this is ok with the RPC call, otherwise make([]byte, 32) beforehand and use PutUvarint
-	proof := common.Proof([]byte{0x00})
+	proof := common.Proof(make([]byte, 1216))
 
 	gbTransfer := new(bn256.G1) // _recompute_ the following, which were computed within proveTransfer...
 	gbTransfer.ScalarBaseMult(big.NewInt(int64(bTransfer)))
@@ -136,7 +136,7 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	// consider sending these explicitly as uints instead of bytes
 
 	// proof := java.proveBurn(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), bTransferBytes, x.Bytes(), bDiffBytes)
-	proof := []byte{0x00}
+	proof := common.Proof(make([]byte, 1184))
 
 	return proof, nil
 }

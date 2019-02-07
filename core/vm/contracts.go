@@ -18,7 +18,6 @@ package vm
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"math/big"
@@ -368,8 +367,8 @@ func (c *bn256Pairing) Run(input []byte) ([]byte, error) {
 	return false32Byte, nil
 }
 
-const ZETHER_TRANSFER_SIZE uint64 = 1216
-const ZETHER_BURN_SIZE uint64 = 1184
+const ZETHER_TRANSFER_SIZE int64 = 1216
+const ZETHER_BURN_SIZE int64 = 1184
 
 type verifyTransfer struct{}
 
@@ -397,9 +396,9 @@ func (c *verifyTransfer) Run(input []byte) ([]byte, error) {
 	copy(y[:], input[320:384])
 	copy(yBar[:], input[384:448])
 
-	proofSize := binary.BigEndian.Uint64(input[480:512])
-	if proofSize != ZETHER_TRANSFER_SIZE {
-		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_TRANSFER_SIZE, proofSize)
+	proofSize := big.NewInt(0).SetBytes(input[480:512])
+	if proofSize.Cmp(big.NewInt(ZETHER_TRANSFER_SIZE)) != 0 {
+		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_TRANSFER_SIZE, proofSize.String())
 		log.Error(msg)
 		return []byte{}, errors.New(msg)
 	}
@@ -435,9 +434,9 @@ func (c *verifyBurn) Run(input []byte) ([]byte, error) {
 	copy(y[:], input[128:192])
 	copy(bTransfer[:], input[192:224]) // just bytes and will deserialize in java, revisit?
 
-	proofSize := binary.BigEndian.Uint64(input[256:288]) // skip 32 location header
-	if proofSize != ZETHER_BURN_SIZE {
-		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_BURN_SIZE, proofSize)
+	proofSize := big.NewInt(0).SetBytes(input[256:288])
+	if proofSize.Cmp(big.NewInt(ZETHER_BURN_SIZE)) != 0 {
+		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_BURN_SIZE, proofSize.String())
 		log.Error(msg)
 		return []byte{}, errors.New(msg)
 	}
