@@ -397,7 +397,7 @@ func (c *verifyTransfer) Run(input []byte) ([]byte, error) {
 	copy(y[:], input[320:384])
 	copy(yBar[:], input[384:448])
 
-	proofSize := binary.BigEndian.Uint64(input[448:480])
+	proofSize := binary.BigEndian.Uint64(input[480:512])
 	if proofSize != ZETHER_TRANSFER_SIZE {
 		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_TRANSFER_SIZE, proofSize)
 		log.Error(msg)
@@ -405,7 +405,7 @@ func (c *verifyTransfer) Run(input []byte) ([]byte, error) {
 	}
 
 	var proof [ZETHER_TRANSFER_SIZE]byte
-	copy(proof[:], input[480:])
+	copy(proof[:], input[512:])
 
 	result := true // result := java.VerifyTransfer(CLn, CRn, inL, outL, inOutR, y, yBar, proof) // JAVA RPC CALL
 
@@ -435,7 +435,7 @@ func (c *verifyBurn) Run(input []byte) ([]byte, error) {
 	copy(y[:], input[128:192])
 	copy(bTransfer[:], input[192:224]) // just bytes and will deserialize in java, revisit?
 
-	proofSize := binary.BigEndian.Uint64(input[224:256])
+	proofSize := binary.BigEndian.Uint64(input[256:288]) // skip 32 location header
 	if proofSize != ZETHER_BURN_SIZE {
 		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_BURN_SIZE, proofSize)
 		log.Error(msg)
@@ -443,7 +443,7 @@ func (c *verifyBurn) Run(input []byte) ([]byte, error) {
 	}
 
 	var proof [ZETHER_BURN_SIZE]byte
-	copy(proof[:], input[256:])
+	copy(proof[:], input[288:])
 
 	result := true // result := java.VerifyBurn(CLn, CRn, y, bTransfer, proof) // JAVA RPC CALL
 

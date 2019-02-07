@@ -20,8 +20,8 @@ func NewPublicZetherAPI() *PublicZetherAPI {
 
 func (api *PublicZetherAPI) CreateAccount() (map[string]interface{}, error) {
 	result := make(map[string]interface{})
-	r := rand.New(rand.NewSource(time.Now().UnixNano())) // can i use the default source?
-	x, y, err := bn256.RandomG1(r)
+	myRand := rand.New(rand.NewSource(time.Now().UnixNano())) // can i use the default source?
+	x, y, err := bn256.RandomG1(myRand)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	}
 	x.UnmarshalText(xBytes)
 	gb := new(bn256.G1)
-	gb.Add(CL, CR.ScalarMult(CR, x.Neg(x)))
+	gb.Add(CL, gb.ScalarMult(CR, x.Neg(x)))
 
 	one := big.NewInt(1)
 	end := big.NewInt(int64(endFloat))
@@ -79,16 +79,53 @@ func (api *PublicZetherAPI) Add(aBytes [2]common.Hash, bBytes [2]common.Hash) ([
 	return [2]common.Hash{common.BytesToHash(sumBytes[:32]), common.BytesToHash(sumBytes[32:])}, nil
 }
 
-func (api *PublicZetherAPI) ProveTransfer(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, yBar [2]common.Hash, x common.Hash, bTransfer float64, bDiff float64) (common.Proof, error) {
-	bTransferBytes := make([]byte, 32)
-	bDiffBytes := make([]byte, 32)
-	binary.PutUvarint(bTransferBytes, uint64(bTransfer))
-	binary.PutUvarint(bDiffBytes, uint64(bDiff))
-	// consider sending these explicitly as uints instead of bytes
+func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]common.Hash, yHash [2]common.Hash, yBarHash [2]common.Hash, xHash common.Hash, bTransfer float64, bDiff float64) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
 
-	// java.createTransfer(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), append(yBar[0].Bytes(), yBar[1].Bytes()...), x.Bytes(), bTransferBytes, bDiffBytes)
+	CL := new(bn256.G1)
+	if _, err := CL.Unmarshal(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)); err != nil {
+		return nil, err
+	}
+	CR := new(bn256.G1)
+	if _, err := CR.Unmarshal(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)); err != nil {
+		return nil, err
+	}
+	y := new(bn256.G1)
+	if _, err := y.Unmarshal(append(yHash[0].Bytes(), yHash[1].Bytes()...)); err != nil {
+		return nil, err
+	}
+	yBar := new(bn256.G1)
+	if _, err := yBar.Unmarshal(append(yBarHash[0].Bytes(), yBarHash[1].Bytes()...)); err != nil {
+		return nil, err
+	}
+	x := new(big.Int)
+	xBytes, err := xHash.MarshalText()
+	if err != nil {
+		return nil, err
+	}
+	x.UnmarshalText(xBytes)
 
-	return []byte{0x00, 0x01, 0x02, 0x03}, nil
+	myRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r, inOutR, err := bn256.RandomG1(myRand)
+	if err != nil {
+		return nil, err
+	}
+
+	// proof := java.proveTransfer(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), append(yBar[0].Bytes(), yBar[1].Bytes()...), x.Bytes(), r.Bytes(), bTransfer.Bytes(), bDiff.Bytes())
+	// warning: calling .Bytes() could yeild a slice of < 32 length. make sure this is ok with the RPC call, otherwise make([]byte, 32) beforehand and use PutUvarint
+	proof := common.Proof([]byte{0x00})
+
+	gbTransfer := new(bn256.G1) // _recompute_ the following, which were computed within proveTransfer...
+	gbTransfer.ScalarBaseMult(big.NewInt(int64(bTransfer)))
+	outL := y.Add(gbTransfer, y.ScalarMult(y, r))         // base in inner expression is dummy
+	inL := yBar.Add(gbTransfer, yBar.ScalarMult(yBar, r)) // value won't be used
+
+	result["outL"] = [2]common.Hash{common.BytesToHash(outL.Marshal()[:32]), common.BytesToHash(outL.Marshal()[32:])}
+	result["inL"] = [2]common.Hash{common.BytesToHash(inL.Marshal()[:32]), common.BytesToHash(inL.Marshal()[32:])}
+	result["inOutR"] = [2]common.Hash{common.BytesToHash(inOutR.Marshal()[:32]), common.BytesToHash(inOutR.Marshal()[32:])}
+	result["proof"] = proof // if had js elliptic packages, could just return only the proof and recompute the rest in web3
+
+	return result, nil
 }
 
 func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer float64, x common.Hash, bDiff float64) (common.Proof, error) {
@@ -98,7 +135,8 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	binary.PutUvarint(bDiffBytes, uint64(bDiff))
 	// consider sending these explicitly as uints instead of bytes
 
-	// java.createTransfer(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), bTransferBytes, x.Bytes(), bDiffBytes)
+	// proof := java.proveBurn(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), bTransferBytes, x.Bytes(), bDiffBytes)
+	proof := []byte{0x00}
 
-	return []byte{0x05, 0x06, 0x07, 0x08}, nil
+	return proof, nil
 }
