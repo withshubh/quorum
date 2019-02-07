@@ -18,13 +18,16 @@ package vm
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/bn256"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"golang.org/x/crypto/ripemd160"
 )
@@ -44,6 +47,9 @@ var PrecompiledContractsHomestead = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{2}): &sha256hash{},
 	common.BytesToAddress([]byte{3}): &ripemd160hash{},
 	common.BytesToAddress([]byte{4}): &dataCopy{},
+
+	common.BytesToAddress([]byte{0x09}): &verifyTransfer{},
+	common.BytesToAddress([]byte{0x0a}): &verifyBurn{},
 }
 
 // PrecompiledContractsByzantium contains the default set of pre-compiled Ethereum
@@ -57,6 +63,9 @@ var PrecompiledContractsByzantium = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{6}): &bn256Add{},
 	common.BytesToAddress([]byte{7}): &bn256ScalarMul{},
 	common.BytesToAddress([]byte{8}): &bn256Pairing{},
+
+	common.BytesToAddress([]byte{0x09}): &verifyTransfer{},
+	common.BytesToAddress([]byte{0x0a}): &verifyBurn{},
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
@@ -357,4 +366,90 @@ func (c *bn256Pairing) Run(input []byte) ([]byte, error) {
 		return true32Byte, nil
 	}
 	return false32Byte, nil
+}
+
+const ZETHER_TRANSFER_SIZE uint64 = 1216
+const ZETHER_BURN_SIZE uint64 = 1184
+
+type verifyTransfer struct{}
+
+func (c *verifyTransfer) RequiredGas(input []byte) uint64 {
+	return params.ZetherGas
+}
+
+func (c *verifyTransfer) Run(input []byte) ([]byte, error) {
+	// ignore keccac
+	input = input[4:]
+
+	var CLn [64]byte
+	var CRn [64]byte
+	var inL [64]byte
+	var outL [64]byte
+	var inOutR [64]byte
+	var y [64]byte
+	var yBar [64]byte
+
+	copy(CLn[:], input[:64])
+	copy(CRn[:], input[64:128])
+	copy(inL[:], input[128:192])
+	copy(outL[:], input[192:256])
+	copy(inOutR[:], input[256:320])
+	copy(y[:], input[320:384])
+	copy(yBar[:], input[384:448])
+
+	proofSize := binary.BigEndian.Uint64(input[448:480])
+	if proofSize != ZETHER_TRANSFER_SIZE {
+		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_TRANSFER_SIZE, proofSize)
+		log.Error(msg)
+		return []byte{}, errors.New(msg)
+	}
+
+	var proof [ZETHER_TRANSFER_SIZE]byte
+	copy(proof[:], input[480:])
+
+	result := true // result := java.VerifyTransfer(CLn, CRn, inL, outL, inOutR, y, yBar, proof) // JAVA RPC CALL
+
+	var b byte
+	if result {
+		b = 1
+	}
+	return []byte{b}, nil
+}
+
+type verifyBurn struct{}
+
+func (c *verifyBurn) RequiredGas(input []byte) uint64 {
+	return params.ZetherGas
+}
+
+func (c *verifyBurn) Run(input []byte) ([]byte, error) {
+	input = input[4:]
+
+	var CLn [64]byte
+	var CRn [64]byte
+	var y [64]byte
+	var bTransfer [32]byte
+	// is it necessary to copy or can i just pass slices to java?
+	copy(CLn[:], input[:64])
+	copy(CRn[:], input[64:128])
+	copy(y[:], input[128:192])
+	copy(bTransfer[:], input[192:224]) // just bytes and will deserialize in java, revisit?
+
+	proofSize := binary.BigEndian.Uint64(input[224:256])
+	if proofSize != ZETHER_BURN_SIZE {
+		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_BURN_SIZE, proofSize)
+		log.Error(msg)
+		return []byte{}, errors.New(msg)
+	}
+
+	var proof [ZETHER_BURN_SIZE]byte
+	copy(proof[:], input[256:])
+
+	result := true // result := java.VerifyBurn(CLn, CRn, y, bTransfer, proof) // JAVA RPC CALL
+
+	var b byte
+	if result {
+		b = 1
+	}
+	return []byte{b}, nil
 }
