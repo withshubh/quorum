@@ -1,13 +1,18 @@
 package zether
 
+import "C"
 import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
+	"io/ioutil"
 	"math/big"
 	"math/rand"
+	"net/http"
 	"time"
 )
 
@@ -16,6 +21,28 @@ type PublicZetherAPI struct {
 
 func NewPublicZetherAPI() *PublicZetherAPI {
 	return &PublicZetherAPI{}
+}
+
+func (api *PublicZetherAPI) TestConnect(b uint) (map[string]string, error) {
+	myRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	x, _, err := bn256.RandomG1(myRand)
+	// test java connectivity
+	req, _ := http.NewRequest("GET", "http://localhost:8080/test", nil)
+	q := req.URL.Query()
+	q.Add("a", common.BytesToHash(x.Bytes()).Hex())
+	q.Add("b", fmt.Sprint(b))
+	req.URL.RawQuery = q.Encode()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.New("failed to execute at server")
+	}
+	resp_body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	return map[string]string{
+		"response" : string(resp_body),
+		"status" : "success",
+	}, nil
 }
 
 func (api *PublicZetherAPI) CreateAccount() (map[string]interface{}, error) {
@@ -79,7 +106,7 @@ func (api *PublicZetherAPI) Add(aBytes [2]common.Hash, bBytes [2]common.Hash) ([
 	return [2]common.Hash{common.BytesToHash(sumBytes[:32]), common.BytesToHash(sumBytes[32:])}, nil
 }
 
-func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]common.Hash, yHash [2]common.Hash, yBarHash [2]common.Hash, xHash common.Hash, bTransfer float64, bDiff float64) (map[string]interface{}, error) {
+func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]common.Hash, yHash [2]common.Hash, yBarHash [2]common.Hash, xHash common.Hash, bTransfer uint64, bDiff uint64) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
 	CL := new(bn256.G1)
@@ -111,9 +138,30 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]com
 		return nil, err
 	}
 
+	// RPC to Java service
+	req, _ := http.NewRequest("GET", "http://localhost:8080/prove-transfer", nil)
+	q := req.URL.Query()
+	q.Add("CL", hexutil.Encode(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)))
+	q.Add("CR", hexutil.Encode(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)))
+	q.Add("y", hexutil.Encode(append(yHash[0].Bytes(), yHash[1].Bytes()...)))
+	q.Add("yBar", hexutil.Encode(append(yBarHash[0].Bytes(), yBarHash[1].Bytes()...)))
+	q.Add("x", hexutil.Encode(x.Bytes()))
+	q.Add("r", common.BytesToHash(r.Bytes()).Hex())
+	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
+	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
+	req.URL.RawQuery = q.Encode()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.New("failed to execute at server")
+	}
+	resp_body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	proof := string(resp_body)
+
 	// proof := java.proveTransfer(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), append(yBar[0].Bytes(), yBar[1].Bytes()...), x.Bytes(), r.Bytes(), bTransfer.Bytes(), bDiff.Bytes())
 	// warning: calling .Bytes() could yeild a slice of < 32 length. make sure this is ok with the RPC call, otherwise make([]byte, 32) beforehand and use PutUvarint
-	proof := common.Proof(make([]byte, 1216))
+	//proof := common.Proof(make([]byte, 1216))
 
 	gbTransfer := new(bn256.G1) // _recompute_ the following, which were computed within proveTransfer...
 	gbTransfer.ScalarBaseMult(big.NewInt(int64(bTransfer)))
@@ -128,15 +176,47 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]com
 	return result, nil
 }
 
-func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer float64, x common.Hash, bDiff float64) (common.Proof, error) {
+func (api *PublicZetherAPI) ProveBurn(CLBytes [2]common.Hash, CRBytes [2]common.Hash, yHash [2]common.Hash, bTransfer uint64, x common.Hash, bDiff uint64) (interface{}, error) {
 	bTransferBytes := make([]byte, 32)
 	bDiffBytes := make([]byte, 32)
 	binary.PutUvarint(bTransferBytes, uint64(bTransfer))
 	binary.PutUvarint(bDiffBytes, uint64(bDiff))
 	// consider sending these explicitly as uints instead of bytes
 
+	CL := new(bn256.G1)
+	if _, err := CL.Unmarshal(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)); err != nil {
+		return nil, err
+	}
+	CR := new(bn256.G1)
+	if _, err := CR.Unmarshal(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)); err != nil {
+		return nil, err
+	}
+	y := new(bn256.G1)
+	if _, err := y.Unmarshal(append(yHash[0].Bytes(), yHash[1].Bytes()...)); err != nil {
+		return nil, err
+	}
+
+	// RPC to Java service
+	req, _ := http.NewRequest("GET", "http://localhost:8080/prove-burn", nil)
+	q := req.URL.Query()
+	q.Add("CL", hexutil.Encode(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)))
+	q.Add("CR", hexutil.Encode(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)))
+	q.Add("y", hexutil.Encode(append(yHash[0].Bytes(), yHash[1].Bytes()...)))
+	q.Add("x", hexutil.Encode(x.Bytes()))
+	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
+	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
+	req.URL.RawQuery = q.Encode()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.New("failed to execute at server")
+	}
+	resp_body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	proof := string(resp_body)
+
 	// proof := java.proveBurn(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), bTransferBytes, x.Bytes(), bDiffBytes)
-	proof := common.Proof(make([]byte, 1184))
+	//proof := common.Proof(make([]byte, 1184))
 
 	return proof, nil
 }

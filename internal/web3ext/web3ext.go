@@ -735,6 +735,11 @@ web3._extend({
 	methods:
 	[
 		new web3._extend.Method({
+			name: 'testConnect',
+			call: 'zether_testConnect',
+			params: 1
+		}),
+		new web3._extend.Method({
 			name: 'createAccount',
 			call: 'zether_createAccount',
 			params: 0

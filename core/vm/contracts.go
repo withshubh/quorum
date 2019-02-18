@@ -17,18 +17,20 @@
 package vm
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
-	"fmt"
-	"math/big"
-
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/bn256"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"golang.org/x/crypto/ripemd160"
+	"io/ioutil"
+	"math/big"
+	"net/http"
 )
 
 // PrecompiledContract is the basic interface for native Go contracts. The implementation
@@ -47,8 +49,8 @@ var PrecompiledContractsHomestead = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{3}): &ripemd160hash{},
 	common.BytesToAddress([]byte{4}): &dataCopy{},
 
-	common.BytesToAddress([]byte{0x09}): &verifyTransfer{},
-	common.BytesToAddress([]byte{0x0a}): &verifyBurn{},
+	//common.BytesToAddress([]byte{0x09}): &verifyTransfer{},
+	//common.BytesToAddress([]byte{0x0a}): &verifyBurn{},
 }
 
 // PrecompiledContractsByzantium contains the default set of pre-compiled Ethereum
@@ -367,8 +369,8 @@ func (c *bn256Pairing) Run(input []byte) ([]byte, error) {
 	return false32Byte, nil
 }
 
-const ZETHER_TRANSFER_SIZE int64 = 1216
-const ZETHER_BURN_SIZE int64 = 1184
+//const ZETHER_TRANSFER_SIZE int64 = 1216
+//const ZETHER_BURN_SIZE int64 = 1184
 
 type verifyTransfer struct{}
 
@@ -376,43 +378,37 @@ func (c *verifyTransfer) RequiredGas(input []byte) uint64 {
 	return params.ZetherGas
 }
 
-func (c *verifyTransfer) Run(input []byte) ([]byte, error) {
-	// ignore keccac
-	input = input[4:]
+func (c *verifyTransfer) Run(inputRaw []byte) ([]byte, error) {
 
-	var CLn [64]byte
-	var CRn [64]byte
-	var inL [64]byte
-	var outL [64]byte
-	var inOutR [64]byte
-	var y [64]byte
-	var yBar [64]byte
+	//log.Info("LUYIN: " + hexutil.Encode(inputRaw))
+	l := new(big.Int).SetBytes(getData(inputRaw, 0, 32)).Int64()
+	input := hexutil.Encode(inputRaw[32:32+l])
 
-	copy(CLn[:], input[:64])
-	copy(CRn[:], input[64:128])
-	copy(inL[:], input[128:192])
-	copy(outL[:], input[192:256])
-	copy(inOutR[:], input[256:320])
-	copy(y[:], input[320:384])
-	copy(yBar[:], input[384:448])
+	req, _ := http.NewRequest("GET", "http://localhost:8080/verify-transfer", nil)
+	q := req.URL.Query()
+	q.Add("input", input)
 
-	proofSize := big.NewInt(0).SetBytes(input[480:512])
-	if proofSize.Cmp(big.NewInt(ZETHER_TRANSFER_SIZE)) != 0 {
-		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_TRANSFER_SIZE, proofSize.String())
-		log.Error(msg)
-		return []byte{}, errors.New(msg)
+	req.URL.RawQuery = q.Encode()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.New("failed to execute at server")
+	}
+	resp_body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+
+	buf := new(bytes.Buffer)
+	if (hexutil.Encode(resp_body) == "0x74727565"){
+		binary.Write(buf, binary.BigEndian, uint32(1))
+		padArr := make([]byte, 32-len(buf.Bytes()))
+		//log.Info("LUYIN", "err", err, "buf", buf.Bytes(), "r32arr", append(padArr, buf.Bytes()...), "str", string(resp_body))
+		return append(padArr, buf.Bytes()...), nil
+	} else {
+		binary.Write(buf, binary.BigEndian, uint32(0))
+		padArr := make([]byte, 32-len(buf.Bytes()))
+		return append(padArr, buf.Bytes()...), nil
 	}
 
-	var proof [ZETHER_TRANSFER_SIZE]byte
-	copy(proof[:], input[512:])
-
-	result := true // result := java.VerifyTransfer(CLn, CRn, inL, outL, inOutR, y, yBar, proof) // JAVA RPC CALL
-
-	var b byte
-	if result {
-		b = 1
-	}
-	return []byte{b}, nil
 }
 
 type verifyBurn struct{}
@@ -421,34 +417,35 @@ func (c *verifyBurn) RequiredGas(input []byte) uint64 {
 	return params.ZetherGas
 }
 
-func (c *verifyBurn) Run(input []byte) ([]byte, error) {
-	input = input[4:]
+func (c *verifyBurn) Run(inputRaw []byte) ([]byte, error) {
 
-	var CLn [64]byte
-	var CRn [64]byte
-	var y [64]byte
-	var bTransfer [32]byte
-	// is it necessary to copy or can i just pass slices to java?
-	copy(CLn[:], input[:64])
-	copy(CRn[:], input[64:128])
-	copy(y[:], input[128:192])
-	copy(bTransfer[:], input[192:224]) // just bytes and will deserialize in java, revisit?
+	//log.Info("LUYIN: " + hexutil.Encode(inputRaw))
+	l := new(big.Int).SetBytes(getData(inputRaw, 0, 32)).Int64()
+	input := hexutil.Encode(inputRaw[32:32+l])
 
-	proofSize := big.NewInt(0).SetBytes(input[256:288])
-	if proofSize.Cmp(big.NewInt(ZETHER_BURN_SIZE)) != 0 {
-		msg := fmt.Sprintf("Zether error, proof must have size of %d bytes, not %d.\n", ZETHER_BURN_SIZE, proofSize.String())
-		log.Error(msg)
-		return []byte{}, errors.New(msg)
+	req, _ := http.NewRequest("GET", "http://localhost:8080/verify-burn", nil)
+	q := req.URL.Query()
+	q.Add("input", input)
+
+	req.URL.RawQuery = q.Encode()
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, errors.New("failed to execute at server")
+	}
+	resp_body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+
+	buf := new(bytes.Buffer)
+	if (hexutil.Encode(resp_body) == "0x74727565"){
+		binary.Write(buf, binary.BigEndian, uint32(1))
+		padArr := make([]byte, 32-len(buf.Bytes()))
+		//log.Info("LUYIN", "err", err, "buf", buf.Bytes(), "r32arr", append(padArr, buf.Bytes()...), "str", string(resp_body))
+		return append(padArr, buf.Bytes()...), nil
+	} else {
+		binary.Write(buf, binary.BigEndian, uint32(0))
+		padArr := make([]byte, 32-len(buf.Bytes()))
+		return append(padArr, buf.Bytes()...), nil
 	}
 
-	var proof [ZETHER_BURN_SIZE]byte
-	copy(proof[:], input[288:])
-
-	result := true // result := java.VerifyBurn(CLn, CRn, y, bTransfer, proof) // JAVA RPC CALL
-
-	var b byte
-	if result {
-		b = 1
-	}
-	return []byte{b}, nil
 }
