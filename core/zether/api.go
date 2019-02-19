@@ -40,8 +40,8 @@ func (api *PublicZetherAPI) TestConnect(b uint) (map[string]string, error) {
 	resp_body, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 	return map[string]string{
-		"response" : string(resp_body),
-		"status" : "success",
+		"response": string(resp_body),
+		"status":   "success",
 	}, nil
 }
 
@@ -61,8 +61,9 @@ func (api *PublicZetherAPI) CreateAccount() (map[string]interface{}, error) {
 	return result, nil
 }
 
-func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]common.Hash, xHash common.Hash, startFloat float64, endFloat float64) (int64, error) {
-	if int64(startFloat) < 0 || int64(endFloat) >= big.MaxPrec {
+func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]common.Hash, xHash common.Hash, start int64, endInt int64) (int64, error) {
+	// using int64, not uint64, for args... make sure nothing goes wrong here
+	if start < 0 || endInt >= big.MaxPrec {
 		return 0, errors.New("Invalid search range!")
 	}
 	CL := new(bn256.G1)
@@ -83,9 +84,9 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	gb.Add(CL, gb.ScalarMult(CR, x.Neg(x)))
 
 	one := big.NewInt(1)
-	end := big.NewInt(int64(endFloat))
+	end := big.NewInt(endInt)
 	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
-	for i := big.NewInt(int64(startFloat)); i.Cmp(end) < 0; i.Add(i, one) {
+	for i := big.NewInt(start); i.Cmp(end) < 0; i.Add(i, one) {
 		test := new(bn256.G1)
 		test.Unmarshal(gBytes)
 		test.ScalarMult(test, i)
@@ -165,15 +166,11 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]com
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.New("failed to execute at server")
+		return nil, errors.New("Failed to execute at server.")
 	}
 	resp_body, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 	proof := string(resp_body)
-
-	// proof := java.proveTransfer(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), append(yBar[0].Bytes(), yBar[1].Bytes()...), x.Bytes(), r.Bytes(), bTransfer.Bytes(), bDiff.Bytes())
-	// warning: calling .Bytes() could yeild a slice of < 32 length. make sure this is ok with the RPC call, otherwise make([]byte, 32) beforehand and use PutUvarint
-	//proof := common.Proof(make([]byte, 1216))
 
 	gbTransfer := new(bn256.G1) // _recompute_ the following, which were computed within proveTransfer...
 	gbTransfer.Unmarshal(gBytes)
@@ -222,14 +219,11 @@ func (api *PublicZetherAPI) ProveBurn(CLBytes [2]common.Hash, CRBytes [2]common.
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.New("failed to execute at server")
+		return nil, errors.New("Failed to execute at server.")
 	}
 	resp_body, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 	proof := string(resp_body)
-
-	// proof := java.proveBurn(append(CL[0].Bytes(), CL[1].Bytes()...), append(CR[0].Bytes(), CR[1].Bytes()...), append(y[0].Bytes(), y[1].Bytes()...), bTransferBytes, x.Bytes(), bDiffBytes)
-	//proof := common.Proof(make([]byte, 1184))
 
 	return proof, nil
 }

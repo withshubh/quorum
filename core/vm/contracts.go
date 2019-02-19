@@ -381,8 +381,7 @@ func (c *verifyTransfer) RequiredGas(input []byte) uint64 {
 func (c *verifyTransfer) Run(inputRaw []byte) ([]byte, error) {
 
 	//log.Info("LUYIN: " + hexutil.Encode(inputRaw))
-	l := new(big.Int).SetBytes(getData(inputRaw, 0, 32)).Int64()
-	input := hexutil.Encode(inputRaw[32:32+l])
+	input := hexutil.Encode(inputRaw)
 
 	req, _ := http.NewRequest("GET", "http://localhost:8080/verify-transfer", nil)
 	q := req.URL.Query()
@@ -392,13 +391,13 @@ func (c *verifyTransfer) Run(inputRaw []byte) ([]byte, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.New("failed to execute at server")
+		return nil, errors.New("Failed to execute at server.")
 	}
 	resp_body, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 
 	buf := new(bytes.Buffer)
-	if (hexutil.Encode(resp_body) == "0x74727565"){
+	if hexutil.Encode(resp_body) == "0x74727565" {
 		binary.Write(buf, binary.BigEndian, uint32(1))
 		padArr := make([]byte, 32-len(buf.Bytes()))
 		//log.Info("LUYIN", "err", err, "buf", buf.Bytes(), "r32arr", append(padArr, buf.Bytes()...), "str", string(resp_body))
@@ -420,8 +419,7 @@ func (c *verifyBurn) RequiredGas(input []byte) uint64 {
 func (c *verifyBurn) Run(inputRaw []byte) ([]byte, error) {
 
 	//log.Info("LUYIN: " + hexutil.Encode(inputRaw))
-	l := new(big.Int).SetBytes(getData(inputRaw, 0, 32)).Int64()
-	input := hexutil.Encode(inputRaw[32:32+l])
+	input := hexutil.Encode(inputRaw)
 
 	req, _ := http.NewRequest("GET", "http://localhost:8080/verify-burn", nil)
 	q := req.URL.Query()
@@ -431,13 +429,13 @@ func (c *verifyBurn) Run(inputRaw []byte) ([]byte, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.New("failed to execute at server")
+		return nil, errors.New("Failed to execute at server.")
 	}
 	resp_body, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 
 	buf := new(bytes.Buffer)
-	if (hexutil.Encode(resp_body) == "0x74727565"){
+	if hexutil.Encode(resp_body) == "0x74727565" {
 		binary.Write(buf, binary.BigEndian, uint32(1))
 		padArr := make([]byte, 32-len(buf.Bytes()))
 		//log.Info("LUYIN", "err", err, "buf", buf.Bytes(), "r32arr", append(padArr, buf.Bytes()...), "str", string(resp_body))
