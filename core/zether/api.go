@@ -48,7 +48,11 @@ func (api *PublicZetherAPI) TestConnect(b uint) (map[string]string, error) {
 func (api *PublicZetherAPI) CreateAccount() (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 	myRand := rand.New(rand.NewSource(time.Now().UnixNano())) // can i use the default source?
-	x, y, err := bn256.RandomG1(myRand)
+	x, _, err := bn256.RandomG1(myRand)
+	y := new(bn256.G1)
+	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
+	y.Unmarshal(gBytes)
+	y.ScalarMult(y, x)
 	if err != nil {
 		return nil, err
 	}
@@ -80,8 +84,11 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 
 	one := big.NewInt(1)
 	end := big.NewInt(int64(endFloat))
+	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
 	for i := big.NewInt(int64(startFloat)); i.Cmp(end) < 0; i.Add(i, one) {
-		test := new(bn256.G1).ScalarBaseMult(i)
+		test := new(bn256.G1)
+		test.Unmarshal(gBytes)
+		test.ScalarMult(test, i)
 		if bytes.Compare(test.Marshal(), gb.Marshal()) == 0 {
 			return i.Int64(), nil
 		}
@@ -133,7 +140,12 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]com
 	x.UnmarshalText(xBytes)
 
 	myRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	r, inOutR, err := bn256.RandomG1(myRand)
+	//r, inOutR, err := bn256.RandomG1(myRand)
+	r, _, err := bn256.RandomG1(myRand)
+	inOutR := new(bn256.G1)
+	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
+	inOutR.Unmarshal(gBytes)
+	inOutR.ScalarMult(inOutR, r)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +176,8 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]com
 	//proof := common.Proof(make([]byte, 1216))
 
 	gbTransfer := new(bn256.G1) // _recompute_ the following, which were computed within proveTransfer...
-	gbTransfer.ScalarBaseMult(big.NewInt(int64(bTransfer)))
+	gbTransfer.Unmarshal(gBytes)
+	gbTransfer.ScalarMult(gbTransfer, big.NewInt(int64(bTransfer)))
 	outL := y.Add(gbTransfer, y.ScalarMult(y, r))         // base in inner expression is dummy
 	inL := yBar.Add(gbTransfer, yBar.ScalarMult(yBar, r)) // value won't be used
 
