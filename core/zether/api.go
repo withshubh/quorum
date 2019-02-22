@@ -63,7 +63,7 @@ func (api *PublicZetherAPI) CreateAccount() (map[string]interface{}, error) {
 
 func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]common.Hash, xHash common.Hash, start int64, endInt int64) (int64, error) {
 	// using int64, not uint64, for args... make sure nothing goes wrong here
-	if start < 0 || endInt >= big.MaxPrec {
+	if start < 0 || endInt > big.MaxPrec {
 		return 0, errors.New("Invalid search range!")
 	}
 	CL := new(bn256.G1)
@@ -86,7 +86,7 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	one := big.NewInt(1)
 	end := big.NewInt(endInt)
 	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
-	for i := big.NewInt(start); i.Cmp(end) < 0; i.Add(i, one) {
+	for i := big.NewInt(start); i.Cmp(end) <= 0; i.Add(i, one) {
 		test := new(bn256.G1)
 		test.Unmarshal(gBytes)
 		test.ScalarMult(test, i)
