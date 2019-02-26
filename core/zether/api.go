@@ -97,23 +97,15 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	return 0, errors.New("Balance decryption failed!")
 }
 
-func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]common.Hash, yHash [2]common.Hash, yBarHash [2]common.Hash, xHash common.Hash, bTransfer uint64, bDiff uint64) (map[string]interface{}, error) {
+func (api *PublicZetherAPI) ProveTransfer(CL [2]common.Hash, CR [2]common.Hash, yBytes [2]common.Hash, yBarBytes [2]common.Hash, xHash common.Hash, bTransfer uint64, bDiff uint64) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
-	CL := new(bn256.G1)
-	if _, err := CL.Unmarshal(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)); err != nil {
-		return nil, err
-	}
-	CR := new(bn256.G1)
-	if _, err := CR.Unmarshal(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)); err != nil {
-		return nil, err
-	}
 	y := new(bn256.G1)
-	if _, err := y.Unmarshal(append(yHash[0].Bytes(), yHash[1].Bytes()...)); err != nil {
+	if _, err := y.Unmarshal(append(yBytes[0].Bytes(), yBytes[1].Bytes()...)); err != nil {
 		return nil, err
 	}
 	yBar := new(bn256.G1)
-	if _, err := yBar.Unmarshal(append(yBarHash[0].Bytes(), yBarHash[1].Bytes()...)); err != nil {
+	if _, err := yBar.Unmarshal(append(yBarBytes[0].Bytes(), yBarBytes[1].Bytes()...)); err != nil {
 		return nil, err
 	}
 	x := new(big.Int)
@@ -137,10 +129,10 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]com
 	// RPC to Java service
 	req, _ := http.NewRequest("GET", "http://localhost:8080/prove-transfer", nil)
 	q := req.URL.Query()
-	q.Add("CL", hexutil.Encode(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)))
-	q.Add("CR", hexutil.Encode(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)))
-	q.Add("y", hexutil.Encode(append(yHash[0].Bytes(), yHash[1].Bytes()...)))
-	q.Add("yBar", hexutil.Encode(append(yBarHash[0].Bytes(), yBarHash[1].Bytes()...)))
+	q.Add("CL", hexutil.Encode(append(CL[0].Bytes(), CL[1].Bytes()...)))
+	q.Add("CR", hexutil.Encode(append(CR[0].Bytes(), CR[1].Bytes()...)))
+	q.Add("y", hexutil.Encode(append(yBytes[0].Bytes(), yBytes[1].Bytes()...)))
+	q.Add("yBar", hexutil.Encode(append(yBarBytes[0].Bytes(), yBarBytes[1].Bytes()...)))
 	q.Add("x", hexutil.Encode(x.Bytes()))
 	q.Add("r", common.BytesToHash(r.Bytes()).Hex())
 	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
@@ -169,32 +161,19 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [2]common.Hash, CRBytes [2]com
 	return result, nil
 }
 
-func (api *PublicZetherAPI) ProveBurn(CLBytes [2]common.Hash, CRBytes [2]common.Hash, yHash [2]common.Hash, bTransfer uint64, x common.Hash, bDiff uint64) (interface{}, error) {
+func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer uint64, x common.Hash, bDiff uint64) (interface{}, error) {
 	bTransferBytes := make([]byte, 32)
 	bDiffBytes := make([]byte, 32)
 	binary.PutUvarint(bTransferBytes, uint64(bTransfer))
 	binary.PutUvarint(bDiffBytes, uint64(bDiff))
 	// consider sending these explicitly as uints instead of bytes
 
-	CL := new(bn256.G1)
-	if _, err := CL.Unmarshal(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)); err != nil {
-		return nil, err
-	}
-	CR := new(bn256.G1)
-	if _, err := CR.Unmarshal(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)); err != nil {
-		return nil, err
-	}
-	y := new(bn256.G1)
-	if _, err := y.Unmarshal(append(yHash[0].Bytes(), yHash[1].Bytes()...)); err != nil {
-		return nil, err
-	}
-
 	// RPC to Java service
 	req, _ := http.NewRequest("GET", "http://localhost:8080/prove-burn", nil)
 	q := req.URL.Query()
-	q.Add("CL", hexutil.Encode(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)))
-	q.Add("CR", hexutil.Encode(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)))
-	q.Add("y", hexutil.Encode(append(yHash[0].Bytes(), yHash[1].Bytes()...)))
+	q.Add("CL", hexutil.Encode(append(CL[0].Bytes(), CL[1].Bytes()...)))
+	q.Add("CR", hexutil.Encode(append(CR[0].Bytes(), CR[1].Bytes()...)))
+	q.Add("y", hexutil.Encode(append(y[0].Bytes(), y[1].Bytes()...)))
 	q.Add("x", hexutil.Encode(x.Bytes()))
 	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
 	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
