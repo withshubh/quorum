@@ -97,23 +97,8 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	return 0, errors.New("Balance decryption failed!")
 }
 
-func (api *PublicZetherAPI) ProveTransfer(CL [2]common.Hash, CR [2]common.Hash, yBytes [2]common.Hash, yBarBytes [2]common.Hash, xHash common.Hash, bTransfer uint64, bDiff uint64) (map[string]interface{}, error) {
+func (api *PublicZetherAPI) ProveTransfer(size uint64, CL [][2]common.Hash, CR [][2]common.Hash, y [][2]common.Hash, x common.Hash, bTransfer uint64, bDiff uint64, outIndex uint64, inIndex uint64) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
-
-	y := new(bn256.G1)
-	if _, err := y.Unmarshal(append(yBytes[0].Bytes(), yBytes[1].Bytes()...)); err != nil {
-		return nil, err
-	}
-	yBar := new(bn256.G1)
-	if _, err := yBar.Unmarshal(append(yBarBytes[0].Bytes(), yBarBytes[1].Bytes()...)); err != nil {
-		return nil, err
-	}
-	x := new(big.Int)
-	xBytes, err := xHash.MarshalText()
-	if err != nil {
-		return nil, err
-	}
-	x.UnmarshalText(xBytes)
 
 	myRand := rand.New(rand.NewSource(time.Now().UnixNano()))
 	//r, inOutR, err := bn256.RandomG1(myRand)
@@ -129,14 +114,15 @@ func (api *PublicZetherAPI) ProveTransfer(CL [2]common.Hash, CR [2]common.Hash, 
 	// RPC to Java service
 	req, _ := http.NewRequest("GET", "http://localhost:8080/prove-transfer", nil)
 	q := req.URL.Query()
-	q.Add("CL", hexutil.Encode(append(CL[0].Bytes(), CL[1].Bytes()...)))
-	q.Add("CR", hexutil.Encode(append(CR[0].Bytes(), CR[1].Bytes()...)))
-	q.Add("y", hexutil.Encode(append(yBytes[0].Bytes(), yBytes[1].Bytes()...)))
-	q.Add("yBar", hexutil.Encode(append(yBarBytes[0].Bytes(), yBarBytes[1].Bytes()...)))
-	q.Add("x", hexutil.Encode(x.Bytes()))
-	q.Add("r", common.BytesToHash(r.Bytes()).Hex())
-	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
-	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
+	// q.Add("CL", hexutil.Encode(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)))
+	// q.Add("CR", hexutil.Encode(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)))
+	// q.Add("y", hexutil.Encode(append(yHash[0].Bytes(), yHash[1].Bytes()...)))
+	// q.Add("yBar", hexutil.Encode(append(yBarHash[0].Bytes(), yBarHash[1].Bytes()...)))
+	// q.Add("x", hexutil.Encode(x.Bytes()))
+	// q.Add("r", common.BytesToHash(r.Bytes()).Hex())
+	// q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
+	// q.Add("bDiff", hexutil.EncodeUint64(bDiff))
+	// ^^^ will need to be replaced with new argument system.
 	req.URL.RawQuery = q.Encode()
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -147,16 +133,35 @@ func (api *PublicZetherAPI) ProveTransfer(CL [2]common.Hash, CR [2]common.Hash, 
 	defer resp.Body.Close()
 	proof := string(resp_body)
 
-	gbTransfer := new(bn256.G1) // _recompute_ the following, which were computed within proveTransfer...
-	gbTransfer.Unmarshal(gBytes)
-	gbTransfer.ScalarMult(gbTransfer, big.NewInt(int64(bTransfer)))
-	outL := y.Add(gbTransfer, y.ScalarMult(y, r))         // base in inner expression is dummy
-	inL := yBar.Add(gbTransfer, yBar.ScalarMult(yBar, r)) // value won't be used
+	// much simpler if everything stays within java.
+	// we will recompute the _unsorted_ (i.e., private ordering) values for L, as well as R, and that's all that needs to be returned.
+	r, _, err := bn256.RandomG1(myRand)
+	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
+	result["L"] = make([][2]common.Hash, size)
+	for i := 0; i < size; i++ {
+		L_i := new(bn256.G1)
+		L_i.Unmarshal(gBytes)
+		L_i.ScalarMult(L_i, r)
+		if i == outIndex {
+			gOut := new(bn256.G1)
+			gOut.ScalarMult(big.NewInt(int64(-bTransfer)))
+			L_i.Add(gOut)
+		} else if i == inIndex {
+			gIn := new(bn256.G1)
+			gIn.ScalarMult(big.NewInt(int64(bTransfer)))
+			L_i.Add(gIn)
+		}
+		result["L"][i] = [2]common.Hash{common.BytesToHash(L_i.Marshal()[:32]), common.BytesToHash(L_i.Marshal()[32:])}
+	}
+	R := new(bn256.G1)
+	R.Unmarshal(gBytes)
+	R.ScalarMult(R, r)
+	if err != nil {
+		return nil, err
+	}
 
-	result["outL"] = [2]common.Hash{common.BytesToHash(outL.Marshal()[:32]), common.BytesToHash(outL.Marshal()[32:])}
-	result["inL"] = [2]common.Hash{common.BytesToHash(inL.Marshal()[:32]), common.BytesToHash(inL.Marshal()[32:])}
-	result["inOutR"] = [2]common.Hash{common.BytesToHash(inOutR.Marshal()[:32]), common.BytesToHash(inOutR.Marshal()[32:])}
-	result["proof"] = proof // if had js elliptic packages, could just return only the proof and recompute the rest in web3
+	result["R"] = [2]common.Hash{common.BytesToHash(R.Marshal()[:32]), common.BytesToHash(R.Marshal()[32:])}
+	result["proof"] = proof // will have to concatenate the shuffle proof!
 
 	return result, nil
 }
