@@ -97,61 +97,63 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	return 0, errors.New("Balance decryption failed!")
 }
 
-func (api *PublicZetherAPI) ProveTransfer(size uint64, CL [][2]common.Hash, CR [][2]common.Hash, y [][2]common.Hash, x common.Hash, bTransfer uint64, bDiff uint64, outIndex uint64, inIndex uint64) (map[string]interface{}, error) {
+func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2]common.Hash, yBytes [][2]common.Hash, x common.Hash, bTransfer uint64, bDiff uint64, outIndex uint64, inIndex uint64) (map[string]interface{}, error) {
+	// note: CL and CR here are before the debits are done, whereas verification takes them after the debits are done.
+	// a bit weird, but makes sense: the contract will have to do them "anyway", whereas geth javascript will not.
 	result := make(map[string]interface{})
 
 	myRand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	//r, inOutR, err := bn256.RandomG1(myRand)
-	r, _, err := bn256.RandomG1(myRand)
-	inOutR := new(bn256.G1)
-	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
-	inOutR.Unmarshal(gBytes)
-	inOutR.ScalarMult(inOutR, r)
-	if err != nil {
-		return nil, err
+
+	size := yBytes.length
+	CL := make([]string, size)
+	CR := make([]string, size)
+	y := make([]string, size)
+	for i := 0; i < size; i++ {
+		CL[i] = hexutil.Encode(append(CLBytes[i][0].Bytes(), CLBytes[i][1].Bytes()))
+		CR[i] = hexutil.Encode(append(CRBytes[i][0].Bytes(), CRBytes[i][1].Bytes()))
+		y[i] = hexutil.Encode(append(yBytes[i][0].Bytes(), yBytes[i][1].Bytes()))
 	}
 
 	// RPC to Java service
 	req, _ := http.NewRequest("GET", "http://localhost:8080/prove-transfer", nil)
 	q := req.URL.Query()
-	// q.Add("CL", hexutil.Encode(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)))
-	// q.Add("CR", hexutil.Encode(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)))
-	// q.Add("y", hexutil.Encode(append(yHash[0].Bytes(), yHash[1].Bytes()...)))
-	// q.Add("yBar", hexutil.Encode(append(yBarHash[0].Bytes(), yBarHash[1].Bytes()...)))
-	// q.Add("x", hexutil.Encode(x.Bytes()))
-	// q.Add("r", common.BytesToHash(r.Bytes()).Hex())
-	// q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
-	// q.Add("bDiff", hexutil.EncodeUint64(bDiff))
-	// ^^^ will need to be replaced with new argument system.
+	q.Add("CL", CL)
+	q.Add("CR", CR)
+	q.Add("y", y)
+	q.Add("x", hexutil.Encode(x.Bytes()))
+	q.Add("r", common.BytesToHash(r.Bytes()).Hex())
+	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
+	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
+	q.add("outIndex", hexutil.EncodeUint64(outIndex))
+	q.add("inIndex", hexutil.EncodeUint64(inIndex))
+
 	req.URL.RawQuery = q.Encode()
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.New("Failed to execute at server.")
+		return nil, errors.New("Failed to execute Java request.")
 	}
 	resp_body, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
 	proof := string(resp_body)
 
-	// much simpler if everything stays within java.
-	// we will recompute the _unsorted_ (i.e., private ordering) values for L, as well as R, and that's all that needs to be returned.
-	r, _, err := bn256.RandomG1(myRand)
 	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
 	result["L"] = make([][2]common.Hash, size)
 	for i := 0; i < size; i++ {
-		L_i := new(bn256.G1)
-		L_i.Unmarshal(gBytes)
-		L_i.ScalarMult(L_i, r)
+		L := new(bn256.G1)
+		L.Unmarshal(yBytes[i])
+		L.ScalarMult(L, r)
 		if i == outIndex {
 			gOut := new(bn256.G1)
+			gOut.Unmarshal(gBytes)
 			gOut.ScalarMult(big.NewInt(int64(-bTransfer)))
-			L_i.Add(gOut)
+			L.Add(L, gOut)
 		} else if i == inIndex {
 			gIn := new(bn256.G1)
 			gIn.ScalarMult(big.NewInt(int64(bTransfer)))
-			L_i.Add(gIn)
+			L.Add(L, gIn)
 		}
-		result["L"][i] = [2]common.Hash{common.BytesToHash(L_i.Marshal()[:32]), common.BytesToHash(L_i.Marshal()[32:])}
+		result["L"][i] = [2]common.Hash{common.BytesToHash(L.Marshal()[:32]), common.BytesToHash(L.Marshal()[32:])}
 	}
 	R := new(bn256.G1)
 	R.Unmarshal(gBytes)
@@ -159,7 +161,6 @@ func (api *PublicZetherAPI) ProveTransfer(size uint64, CL [][2]common.Hash, CR [
 	if err != nil {
 		return nil, err
 	}
-
 	result["R"] = [2]common.Hash{common.BytesToHash(R.Marshal()[:32]), common.BytesToHash(R.Marshal()[32:])}
 	result["proof"] = proof // will have to concatenate the shuffle proof!
 
@@ -186,7 +187,7 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.New("Failed to execute at server.")
+		return nil, errors.New("Failed to execute Java request.")
 	}
 	resp_body, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
