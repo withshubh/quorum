@@ -98,7 +98,7 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	return 0, errors.New("Balance decryption failed!")
 }
 
-func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2]common.Hash, yBytes [][2]common.Hash, gEpoch [2]common.Hash, xBytes common.Hash, bTransfer uint64, bDiff uint64, index []uint64) (map[string]interface{}, error) {
+func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2]common.Hash, yBytes [][2]common.Hash, epoch uint64, xBytes common.Hash, bTransfer uint64, bDiff uint64, index []uint64) (map[string]interface{}, error) {
 	// note: CL and CR here are before the debits are done, whereas verification takes them after the debits are done.
 	// a bit weird, but makes sense: the contract will have to do them "anyway", whereas geth javascript will not.
 	// edit: actually, CL and CR should represent the state after any "overdue rollovers" are done, but before the debits are done.
@@ -122,7 +122,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	q.Add("CL", CL.String())
 	q.Add("CR", CR.String())
 	q.Add("y", y.String())
-	q.Add("gEpoch", hexutil.Encode(append(gEpoch[0].Bytes(), gEpoch[1].Bytes()...)))
+	q.Add("epoch", hexutil.EncodeUint64(epoch))
 	q.Add("x", hexutil.Encode(xBytes.Bytes()))
 	q.Add("r", common.BytesToHash(r.Bytes()).Hex())
 	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
@@ -166,8 +166,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	x := new(big.Int)
 	x.SetBytes(xBytes.Bytes())
 	u := new(bn256.G1)
-	u.Unmarshal(append(gEpoch[0].Bytes(), gEpoch[1].Bytes()...))
-	u.ScalarMult(u, x)
+	// somehow need to compute u = mapinto(Zether + epoch)^x.
 	result["L"] = L
 	result["R"] = [2]common.Hash{common.BytesToHash(R.Marshal()[:32]), common.BytesToHash(R.Marshal()[32:])}
 	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
@@ -178,7 +177,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	return result, nil
 }
 
-func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer uint64, gEpoch [2]common.Hash, x common.Hash, bDiff uint64) (interface{}, error) {
+func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer uint64, epoch uint64, x common.Hash, bDiff uint64) (interface{}, error) {
 	bTransferBytes := make([]byte, 32)
 	bDiffBytes := make([]byte, 32)
 	binary.PutUvarint(bTransferBytes, uint64(bTransfer))
@@ -190,10 +189,10 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	q := req.URL.Query()
 	q.Add("CL", hexutil.Encode(append(CL[0].Bytes(), CL[1].Bytes()...)))
 	q.Add("CR", hexutil.Encode(append(CR[0].Bytes(), CR[1].Bytes()...)))
-	q.Add("gEpoch", hexutil.Encode(append(gEpoch[0].Bytes(), gEpoch[1].Bytes()...)))
 	q.Add("y", hexutil.Encode(append(y[0].Bytes(), y[1].Bytes()...)))
-	q.Add("x", hexutil.Encode(x.Bytes()))
 	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
+	q.Add("epoch", hexutil.EncodeUint64(epoch))
+	q.Add("x", hexutil.Encode(x.Bytes()))
 	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
 	req.URL.RawQuery = q.Encode()
 	client := &http.Client{}

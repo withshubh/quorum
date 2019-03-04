@@ -752,12 +752,12 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'proveTransfer',
 			call: 'zether_proveTransfer',
-			params: 7
+			params: 8
 		}),
 		new web3._extend.Method({
 			name: 'proveBurn',
 			call: 'zether_proveBurn',
-			params: 6
+			params: 7
 		})
 	]
 });
