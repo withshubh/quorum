@@ -116,9 +116,6 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 }
 
 func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2]common.Hash, yBytes [][2]common.Hash, epoch uint64, xBytes common.Hash, bTransfer uint64, bDiff uint64, index []uint64) (map[string]interface{}, error) {
-	// note: CL and CR here are before the debits are done, whereas verification takes them after the debits are done.
-	// a bit weird, but makes sense: the contract will have to do them "anyway", whereas geth javascript will not.
-	// edit: actually, CL and CR should represent the state after any "overdue rollovers" are done, but before the debits are done.
 	result := make(map[string]interface{})
 
 	myRand := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -188,13 +185,14 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	result["R"] = [2]common.Hash{common.BytesToHash(R.Marshal()[:32]), common.BytesToHash(R.Marshal()[32:])}
 	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
 	// ^^^ again, all of these extra bits would be unnecessary if elliptic curve ops could be performed directly in javascript.
-	// as another alternative, could add ec operations to the zether namespace, but this is sort of clunky.
 	result["proof"] = proof
 
 	return result, nil
 }
 
-func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer uint64, epoch uint64, x common.Hash, bDiff uint64) (interface{}, error) {
+func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer uint64, epoch uint64, x common.Hash, bDiff uint64) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+
 	bTransferBytes := make([]byte, 32)
 	bDiffBytes := make([]byte, 32)
 	binary.PutUvarint(bTransferBytes, uint64(bTransfer))
@@ -221,5 +219,10 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	defer resp.Body.Close()
 	proof := string(resp_body)
 
-	return proof, nil
+	u := new(bn256.G1)
+	// urgent: need to recompute g_epoch ^ x = u.
+	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
+	result["proof"] = proof
+
+	return result, nil
 }
