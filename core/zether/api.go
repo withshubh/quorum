@@ -62,6 +62,23 @@ func (api *PublicZetherAPI) CreateAccount() (map[string]interface{}, error) {
 	return result, nil
 }
 
+func (api *PublicZetherAPI) Add(aBytes [2]common.Hash, bBytes [2]common.Hash) ([2]common.Hash, error) {
+	A := new(bn256.G1)
+	if _, err := A.Unmarshal(append(aBytes[0].Bytes(), aBytes[1].Bytes()...)); err != nil {
+		return [2]common.Hash{common.BytesToHash(make([]byte, 32)), common.BytesToHash(make([]byte, 32))}, err
+	}
+	B := new(bn256.G1)
+	if _, err := B.Unmarshal(append(bBytes[0].Bytes(), bBytes[1].Bytes()...)); err != nil {
+		return [2]common.Hash{common.BytesToHash(make([]byte, 32)), common.BytesToHash(make([]byte, 32))}, err
+	}
+
+	sum := new(bn256.G1)
+	sum.Add(A, B)
+	sumBytes := sum.Marshal()
+
+	return [2]common.Hash{common.BytesToHash(sumBytes[:32]), common.BytesToHash(sumBytes[32:])}, nil
+}
+
 func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]common.Hash, xHash common.Hash, start int64, endInt int64) (int64, error) {
 	// using int64, not uint64, for args... make sure nothing goes wrong here
 	if start < 0 || endInt > big.MaxPrec {
