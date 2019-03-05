@@ -64,34 +64,50 @@ func (api *PublicZetherAPI) CreateAccount() (map[string]interface{}, error) {
 	return result, nil
 }
 
-func (api *PublicZetherAPI) Add(aBytes [2]common.Hash, bBytes [2]common.Hash) ([2]common.Hash, error) {
-	A := new(bn256.G1)
-	if _, err := A.Unmarshal(append(aBytes[0].Bytes(), aBytes[1].Bytes()...)); err != nil {
-		return [2]common.Hash{common.BytesToHash(make([]byte, 32)), common.BytesToHash(make([]byte, 32))}, err
-	}
-	B := new(bn256.G1)
-	if _, err := B.Unmarshal(append(bBytes[0].Bytes(), bBytes[1].Bytes()...)); err != nil {
-		return [2]common.Hash{common.BytesToHash(make([]byte, 32)), common.BytesToHash(make([]byte, 32))}, err
-	}
+func (api *PublicZetherAPI) Add(aBytes [2][2]common.Hash, bBytes [2][2]common.Hash) [2][2]common.Hash {
+	// adds two elemengs of G x G.
+	aL := new(bn256.G1)
+	aL.Unmarshal(append(aBytes[0][0].Bytes(), aBytes[0][1].Bytes()...))
+	aR := new(bn256.G1)
+	aR.Unmarshal(append(aBytes[1][0].Bytes(), aBytes[1][1].Bytes()...))
+	bL := new(bn256.G1)
+	bL.Unmarshal(append(bBytes[0][0].Bytes(), bBytes[0][1].Bytes()...))
+	bR := new(bn256.G1)
+	bR.Unmarshal(append(bBytes[1][0].Bytes(), bBytes[1][1].Bytes()...))
 
-	sum := new(bn256.G1)
-	sum.Add(A, B)
-	sumBytes := sum.Marshal()
+	resultL := new(bn256.G1)
+	resultL.Add(aL, bL)
+	resultR := new(bn256.G1)
+	resultR.Add(aR, bR)
+	resultLBytes := resultL.Marshal()
+	resultRBytes := resultR.Marshal()
 
-	return [2]common.Hash{common.BytesToHash(sumBytes[:32]), common.BytesToHash(sumBytes[32:])}, nil
+	return [2][2]common.Hash{{common.BytesToHash(resultLBytes[:32]), common.BytesToHash(resultLBytes[32:])}, {common.BytesToHash(resultRBytes[:32]), common.BytesToHash(resultRBytes[32:])}}
 }
 
-func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]common.Hash, xHash common.Hash, start int64, endInt int64) (int64, error) {
+func (api *PublicZetherAPI) Adjust(k int64, aBytes [2][2]common.Hash) [2][2]common.Hash {
+	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
+	adjustmentL := new(bn256.G1)
+	adjustmentL.Unmarshal(gBytes)
+	adjustmentL.ScalarMult(adjustmentL, big.NewInt(k))
+	adjustmentLBytes := adjustmentL.Marshal()
+	adjustmentRBytes := make([]byte, 64)
+	adjustmentBytes := [2][2]common.Hash{{common.BytesToHash(adjustmentLBytes[:32]), common.BytesToHash(adjustmentLBytes[32:])}, {common.BytesToHash(adjustmentRBytes[:32]), common.BytesToHash(adjustmentRBytes[32:])}}
+
+	return api.Add(adjustmentBytes, aBytes)
+}
+
+func (api *PublicZetherAPI) ReadBalance(CBytes [2][2]common.Hash, xHash common.Hash, start int64, endInt int64) (int64, error) {
 	// using int64, not uint64, for args... make sure nothing goes wrong here
 	if start < 0 || endInt > big.MaxPrec {
 		return 0, errors.New("Invalid search range!")
 	}
 	CL := new(bn256.G1)
-	if _, err := CL.Unmarshal(append(CLBytes[0].Bytes(), CLBytes[1].Bytes()...)); err != nil {
+	if _, err := CL.Unmarshal(append(CBytes[0][0].Bytes(), CBytes[0][1].Bytes()...)); err != nil {
 		return 0, err
 	}
 	CR := new(bn256.G1)
-	if _, err := CR.Unmarshal(append(CRBytes[0].Bytes(), CRBytes[1].Bytes()...)); err != nil {
+	if _, err := CR.Unmarshal(append(CBytes[1][0].Bytes(), CBytes[1][1].Bytes()...)); err != nil {
 		return 0, err
 	}
 	x := new(big.Int)

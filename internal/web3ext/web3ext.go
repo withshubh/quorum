@@ -747,7 +747,7 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'readBalance',
 			call: 'zether_readBalance',
-			params: 5
+			params: 4
 		}),
 		new web3._extend.Method({
 			name: 'proveTransfer',
@@ -762,6 +762,11 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'add',
 			call: 'zether_add',
+			params: 2
+		}),
+		new web3._extend.Method({
+			name: 'adjust',
+			call: 'zether_adjust',
 			params: 2
 		})
 	]
