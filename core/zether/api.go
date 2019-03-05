@@ -8,11 +8,13 @@ import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/bn256/cloudflare"
 	"io/ioutil"
 	"math/big"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -36,7 +38,7 @@ func (api *PublicZetherAPI) TestConnect(b uint) (map[string]string, error) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, errors.New("failed to execute at server")
+		return nil, errors.New("Failed to execute Java request.")
 	}
 	resp_body, _ := ioutil.ReadAll(resp.Body)
 	defer resp.Body.Close()
@@ -115,7 +117,31 @@ func (api *PublicZetherAPI) ReadBalance(CLBytes [2]common.Hash, CRBytes [2]commo
 	return 0, errors.New("Balance decryption failed!")
 }
 
-func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2]common.Hash, yBytes [][2]common.Hash, epoch uint64, xBytes common.Hash, bTransfer uint64, bDiff uint64, index []uint64) (map[string]interface{}, error) {
+func mapInto(temp string) bn256.G1 { // could also conceivably just return the raw bytes...
+	p := hexutil.MustDecodeBig("0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47") // field order
+	x := new(big.Int)
+	x.SetBytes(crypto.Keccak256([]byte(temp)))
+	x.Mod(x, p)
+	y := new(big.Int)
+	for {
+		y = big.NewInt(0)
+		ySquared := y.Add(y.Exp(x, big.NewInt(3), p), big.NewInt(3)) // throw away base values
+		y = y.ModSqrt(ySquared, p)                                   // y.Exp(ySquared, y.Div(y.Add(p, big.NewInt(1)), big.NewInt(4)), p) // why doesn't this work?!?!?!?
+		if y != nil {                                                // assignment is only necessary above in the case of failure.
+			break
+		}
+		x.Add(x, big.NewInt(1))
+	}
+	xBytes := make([]byte, 32)
+	yBytes := make([]byte, 32)
+	copy(xBytes[:], x.Bytes())
+	copy(yBytes[:], y.Bytes())
+	result := new(bn256.G1)
+	result.Unmarshal(append(xBytes, yBytes...))
+	return *result
+}
+
+func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2]common.Hash, yBytes [][2]common.Hash, epoch uint64, x common.Hash, bTransfer uint64, bDiff uint64, index []uint64) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
 	myRand := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -137,7 +163,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	q.Add("CR", CR.String())
 	q.Add("y", y.String())
 	q.Add("epoch", hexutil.EncodeUint64(epoch))
-	q.Add("x", hexutil.Encode(xBytes.Bytes()))
+	q.Add("x", hexutil.Encode(x.Bytes()))
 	q.Add("r", common.BytesToHash(r.Bytes()).Hex())
 	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
 	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
@@ -177,10 +203,8 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	if err != nil {
 		return nil, err
 	}
-	x := new(big.Int)
-	x.SetBytes(xBytes.Bytes())
-	u := new(bn256.G1)
-	// somehow need to compute u = mapinto(Zether + epoch)^x.
+	u := mapInto("Zether " + strconv.FormatUint(epoch, 10))
+	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
 	result["L"] = L
 	result["R"] = [2]common.Hash{common.BytesToHash(R.Marshal()[:32]), common.BytesToHash(R.Marshal()[32:])}
 	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
@@ -219,8 +243,7 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	defer resp.Body.Close()
 	proof := string(resp_body)
 
-	u := new(bn256.G1)
-	// urgent: need to recompute g_epoch ^ x = u.
+	u := mapInto("Zether " + strconv.FormatUint(epoch, 10))
 	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
 	result["proof"] = proof
 
