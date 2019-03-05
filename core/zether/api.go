@@ -133,27 +133,31 @@ func (api *PublicZetherAPI) ReadBalance(CBytes [2][2]common.Hash, xHash common.H
 	return 0, errors.New("Balance decryption failed!")
 }
 
-func mapInto(temp string) bn256.G1 { // could also conceivably just return the raw bytes...
+func computeU(input string, xBytes common.Hash) bn256.G1 { // could also conceivably just return the raw bytes...
 	p := hexutil.MustDecodeBig("0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47") // field order
 	x := new(big.Int)
-	x.SetBytes(crypto.Keccak256([]byte(temp)))
-	x.Mod(x, p)
+	x.SetBytes(xBytes.Bytes())
+
+	seed := new(big.Int)
+	seed.SetBytes(crypto.Keccak256([]byte(input)))
+	seed.Mod(seed, p)
 	y := new(big.Int)
 	for {
 		y = big.NewInt(0)
-		ySquared := y.Add(y.Exp(x, big.NewInt(3), p), big.NewInt(3)) // throw away base values
-		y = y.ModSqrt(ySquared, p)                                   // y.Exp(ySquared, y.Div(y.Add(p, big.NewInt(1)), big.NewInt(4)), p) // why doesn't this work?!?!?!?
-		if y != nil {                                                // assignment is only necessary above in the case of failure.
+		ySquared := y.Add(y.Exp(seed, big.NewInt(3), p), big.NewInt(3)) // throw away base values
+		y = y.ModSqrt(ySquared, p)                                      // y.Exp(ySquared, y.Div(y.Add(p, big.NewInt(1)), big.NewInt(4)), p) // why doesn't this work?!?!?!?
+		if y != nil {                                                   // assignment is only necessary above in the case of failure.
 			break
 		}
-		x.Add(x, big.NewInt(1))
+		seed.Add(seed, big.NewInt(1))
 	}
-	xBytes := make([]byte, 32)
+	seedBytes := make([]byte, 32)
 	yBytes := make([]byte, 32)
-	copy(xBytes[:], x.Bytes())
+	copy(seedBytes[:], seed.Bytes())
 	copy(yBytes[:], y.Bytes())
 	result := new(bn256.G1)
-	result.Unmarshal(append(xBytes, yBytes...))
+	result.Unmarshal(append(seedBytes, yBytes...))
+	result.ScalarMult(result, x)
 	return *result
 }
 
@@ -219,7 +223,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	if err != nil {
 		return nil, err
 	}
-	u := mapInto("Zether " + strconv.FormatUint(epoch, 10))
+	u := computeU("Zether "+strconv.FormatUint(epoch, 10), x)
 	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
 	result["L"] = L
 	result["R"] = [2]common.Hash{common.BytesToHash(R.Marshal()[:32]), common.BytesToHash(R.Marshal()[32:])}
@@ -259,7 +263,7 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	defer resp.Body.Close()
 	proof := string(resp_body)
 
-	u := mapInto("Zether " + strconv.FormatUint(epoch, 10))
+	u := computeU("Zether "+strconv.FormatUint(epoch, 10), x)
 	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
 	result["proof"] = proof
 
