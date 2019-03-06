@@ -143,10 +143,8 @@ func computeU(input string, xBytes common.Hash) bn256.G1 { // could also conceiv
 	seed.Mod(seed, p)
 	y := new(big.Int)
 	for {
-		y = big.NewInt(0)
 		ySquared := y.Add(y.Exp(seed, big.NewInt(3), p), big.NewInt(3)) // throw away base values
-		y = y.ModSqrt(ySquared, p)                                      // y.Exp(ySquared, y.Div(y.Add(p, big.NewInt(1)), big.NewInt(4)), p) // why doesn't this work?!?!?!?
-		if y != nil {                                                   // assignment is only necessary above in the case of failure.
+		if y.ModSqrt(ySquared, p) != nil {                              // y.Exp(ySquared, y.Div(y.Add(p, big.NewInt(1)), big.NewInt(4)), p) // why doesn't this work?!?!?!?
 			break
 		}
 		seed.Add(seed, big.NewInt(1))
@@ -216,6 +214,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 			L_i.Add(L_i, gOut)
 		} else if uint64(i) == index[1] {
 			gIn := new(bn256.G1)
+			gIn.Unmarshal(gBytes)
 			gIn.ScalarMult(gIn, big.NewInt(int64(bTransfer)))
 			L_i.Add(L_i, gIn)
 		}
