@@ -98,8 +98,8 @@ func (api *PublicZetherAPI) Adjust(k int64, aBytes [2][2]common.Hash) [2][2]comm
 }
 
 func (api *PublicZetherAPI) ReadBalance(CBytes [2][2]common.Hash, xHash common.Hash, start int64, endInt int64) (int64, error) {
-	// using int64, not uint64, for args... make sure nothing goes wrong here
-	if start < 0 || endInt > big.MaxPrec {
+	// no longer checking whether start >= 0.
+	if endInt > big.MaxPrec {
 		return 0, errors.New("Invalid search range!")
 	}
 	CL := new(bn256.G1)
