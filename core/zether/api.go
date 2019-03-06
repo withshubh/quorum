@@ -170,10 +170,13 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	var CL strings.Builder
 	var CR strings.Builder
 	var y strings.Builder
+	CL.WriteString("0x")
+	CR.WriteString("0x")
+	y.WriteString("0x")
 	for i := 0; i < size; i++ {
-		CL.WriteString(hexutil.Encode(append(CLBytes[i][0].Bytes(), CLBytes[i][1].Bytes()...)))
-		CR.WriteString(hexutil.Encode(append(CRBytes[i][0].Bytes(), CRBytes[i][1].Bytes()...)))
-		y.WriteString(hexutil.Encode(append(yBytes[i][0].Bytes(), yBytes[i][1].Bytes()...)))
+		CL.WriteString(hexutil.Encode(append(CLBytes[i][0].Bytes(), CLBytes[i][1].Bytes()...))[2:])
+		CR.WriteString(hexutil.Encode(append(CRBytes[i][0].Bytes(), CRBytes[i][1].Bytes()...))[2:])
+		y.WriteString(hexutil.Encode(append(yBytes[i][0].Bytes(), yBytes[i][1].Bytes()...))[2:])
 	}
 
 	// RPC to Java service
@@ -187,7 +190,8 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	q.Add("r", common.BytesToHash(r.Bytes()).Hex())
 	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
 	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
-	q.Add("index", hexutil.EncodeUint64(index[0])+hexutil.EncodeUint64(index[1]))
+	q.Add("outIndex", hexutil.EncodeUint64(index[0]))
+	q.Add("inIndex", hexutil.EncodeUint64(index[1]))
 
 	req.URL.RawQuery = q.Encode()
 	client := &http.Client{}
