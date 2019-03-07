@@ -383,7 +383,7 @@ func (c *verifyTransfer) Run(inputRaw []byte) ([]byte, error) {
 	//log.Info("LUYIN: " + hexutil.Encode(inputRaw))
 	input := hexutil.Encode(inputRaw)
 
-	req, _ := http.NewRequest("GET", "http://localhost:8080/verify-transfer", nil)
+	req, _ := http.NewRequest("POST", "http://localhost:8080/verify-transfer", nil)
 	q := req.URL.Query()
 	q.Add("input", input)
 
@@ -421,7 +421,7 @@ func (c *verifyBurn) Run(inputRaw []byte) ([]byte, error) {
 	//log.Info("LUYIN: " + hexutil.Encode(inputRaw))
 	input := hexutil.Encode(inputRaw)
 
-	req, _ := http.NewRequest("GET", "http://localhost:8080/verify-burn", nil)
+	req, _ := http.NewRequest("POST", "http://localhost:8080/verify-burn", nil)
 	q := req.URL.Query()
 	q.Add("input", input)
 

@@ -139,8 +139,8 @@ func computeU(input string, xBytes common.Hash) bn256.G1 { // could also conceiv
 	}
 	seedBytes := make([]byte, 32)
 	yBytes := make([]byte, 32)
-	copy(seedBytes[:], seed.Bytes())
-	copy(yBytes[:], y.Bytes())
+	copy(seedBytes[32-len(seed.Bytes()):], seed.Bytes()) // right-justify
+	copy(yBytes[32-len(y.Bytes()):], y.Bytes())          // right-justify
 	result := new(bn256.G1)
 	result.Unmarshal(append(seedBytes, yBytes...))
 	result.ScalarMult(result, x)
@@ -215,7 +215,6 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 		return nil, err
 	}
 	u := computeU("Zether "+strconv.FormatUint(epoch, 10), x)
-	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
 	result["L"] = L
 	result["R"] = [2]common.Hash{common.BytesToHash(R.Marshal()[:32]), common.BytesToHash(R.Marshal()[32:])}
 	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
