@@ -747,17 +747,22 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'readBalance',
 			call: 'zether_readBalance',
-			params: 5
+			params: 4
 		}),
 		new web3._extend.Method({
 			name: 'proveTransfer',
 			call: 'zether_proveTransfer',
-			params: 7
+			params: 8
 		}),
 		new web3._extend.Method({
 			name: 'proveBurn',
 			call: 'zether_proveBurn',
-			params: 6
+			params: 7
+		}),
+		new web3._extend.Method({
+			name: 'add',
+			call: 'zether_add',
+			params: 2
 		})
 	]
 });
