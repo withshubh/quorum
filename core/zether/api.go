@@ -85,18 +85,6 @@ func (api *PublicZetherAPI) Add(aBytes [2][2]common.Hash, bBytes [2][2]common.Ha
 	return [2][2]common.Hash{{common.BytesToHash(resultLBytes[:32]), common.BytesToHash(resultLBytes[32:])}, {common.BytesToHash(resultRBytes[:32]), common.BytesToHash(resultRBytes[32:])}}
 }
 
-func (api *PublicZetherAPI) Adjust(k int64, aBytes [2][2]common.Hash) [2][2]common.Hash {
-	gBytes, _ := hexutil.Decode("0x077da99d806abd13c9f15ece5398525119d11e11e9836b2ee7d23f6159ad87d401485efa927f2ad41bff567eec88f32fb0a0f706588b4e41a8d587d008b7f875")
-	adjustmentL := new(bn256.G1)
-	adjustmentL.Unmarshal(gBytes)
-	adjustmentL.ScalarMult(adjustmentL, big.NewInt(k))
-	adjustmentLBytes := adjustmentL.Marshal()
-	adjustmentRBytes := make([]byte, 64)
-	adjustmentBytes := [2][2]common.Hash{{common.BytesToHash(adjustmentLBytes[:32]), common.BytesToHash(adjustmentLBytes[32:])}, {common.BytesToHash(adjustmentRBytes[:32]), common.BytesToHash(adjustmentRBytes[32:])}}
-
-	return api.Add(adjustmentBytes, aBytes)
-}
-
 func (api *PublicZetherAPI) ReadBalance(CBytes [2][2]common.Hash, xHash common.Hash, start int64, endInt int64) (int64, error) {
 	// no longer checking whether start >= 0.
 	if endInt > big.MaxPrec {

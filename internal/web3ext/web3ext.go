@@ -763,11 +763,6 @@ web3._extend({
 			name: 'add',
 			call: 'zether_add',
 			params: 2
-		}),
-		new web3._extend.Method({
-			name: 'adjust',
-			call: 'zether_adjust',
-			params: 2
 		})
 	]
 });
