@@ -397,7 +397,7 @@ func (c *verifyTransfer) Run(inputRaw []byte) ([]byte, error) {
 	defer resp.Body.Close()
 
 	buf := new(bytes.Buffer)
-	if hexutil.Encode(resp_body) == "0x74727565" {
+	if string(resp_body) == "true" {
 		binary.Write(buf, binary.BigEndian, uint32(1))
 		padArr := make([]byte, 32-len(buf.Bytes()))
 		//log.Info("LUYIN", "err", err, "buf", buf.Bytes(), "r32arr", append(padArr, buf.Bytes()...), "str", string(resp_body))
@@ -435,7 +435,7 @@ func (c *verifyBurn) Run(inputRaw []byte) ([]byte, error) {
 	defer resp.Body.Close()
 
 	buf := new(bytes.Buffer)
-	if hexutil.Encode(resp_body) == "0x74727565" {
+	if string(resp_body) == "true" {
 		binary.Write(buf, binary.BigEndian, uint32(1))
 		padArr := make([]byte, 32-len(buf.Bytes()))
 		//log.Info("LUYIN", "err", err, "buf", buf.Bytes(), "r32arr", append(padArr, buf.Bytes()...), "str", string(resp_body))
