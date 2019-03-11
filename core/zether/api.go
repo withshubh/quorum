@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -166,8 +167,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	}
 
 	// RPC to Java service
-	req, _ := http.NewRequest("GET", "http://localhost:8080/prove-transfer", nil)
-	q := req.URL.Query()
+	q := url.Values{}
 	q.Add("CL", CL.String())
 	q.Add("CR", CR.String())
 	q.Add("y", y.String())
@@ -179,9 +179,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	q.Add("outIndex", hexutil.EncodeUint64(index[0]))
 	q.Add("inIndex", hexutil.EncodeUint64(index[1]))
 
-	req.URL.RawQuery = q.Encode()
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.PostForm("http://localhost:8080/prove-transfer", q)
 	if err != nil {
 		return nil, errors.New("Failed to execute Java request.")
 	}
@@ -234,8 +232,7 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	// consider sending these explicitly as uints instead of bytes
 
 	// RPC to Java service
-	req, _ := http.NewRequest("GET", "http://localhost:8080/prove-burn", nil)
-	q := req.URL.Query()
+	q := url.Values{}
 	q.Add("CL", hexutil.Encode(append(CL[0].Bytes(), CL[1].Bytes()...)))
 	q.Add("CR", hexutil.Encode(append(CR[0].Bytes(), CR[1].Bytes()...)))
 	q.Add("y", hexutil.Encode(append(y[0].Bytes(), y[1].Bytes()...)))
@@ -243,9 +240,8 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	q.Add("epoch", hexutil.EncodeUint64(epoch))
 	q.Add("x", hexutil.Encode(x.Bytes()))
 	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
-	req.URL.RawQuery = q.Encode()
-	client := &http.Client{}
-	resp, err := client.Do(req)
+
+	resp, err := http.PostForm("http://localhost:8080/prove-burn", q)
 	if err != nil {
 		return nil, errors.New("Failed to execute Java request.")
 	}

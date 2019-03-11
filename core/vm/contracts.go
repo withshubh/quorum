@@ -31,6 +31,7 @@ import (
 	"io/ioutil"
 	"math/big"
 	"net/http"
+	"net/url"
 )
 
 // PrecompiledContract is the basic interface for native Go contracts. The implementation
@@ -383,13 +384,7 @@ func (c *verifyTransfer) Run(inputRaw []byte) ([]byte, error) {
 	//log.Info("LUYIN: " + hexutil.Encode(inputRaw))
 	input := hexutil.Encode(inputRaw)
 
-	req, _ := http.NewRequest("POST", "http://localhost:8080/verify-transfer", nil)
-	q := req.URL.Query()
-	q.Add("input", input)
-
-	req.URL.RawQuery = q.Encode()
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.PostForm("http://localhost:8080/verify-transfer", url.Values{"input": {input}})
 	if err != nil {
 		return nil, errors.New("Failed to execute at server.")
 	}
@@ -421,13 +416,7 @@ func (c *verifyBurn) Run(inputRaw []byte) ([]byte, error) {
 	//log.Info("LUYIN: " + hexutil.Encode(inputRaw))
 	input := hexutil.Encode(inputRaw)
 
-	req, _ := http.NewRequest("POST", "http://localhost:8080/verify-burn", nil)
-	q := req.URL.Query()
-	q.Add("input", input)
-
-	req.URL.RawQuery = q.Encode()
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.PostForm("http://localhost:8080/verify-burn", url.Values{"input": {input}})
 	if err != nil {
 		return nil, errors.New("Failed to execute at server.")
 	}
