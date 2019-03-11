@@ -394,13 +394,10 @@ func (c *verifyTransfer) Run(inputRaw []byte) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	if string(resp_body) == "true" {
 		binary.Write(buf, binary.BigEndian, uint32(1))
-		padArr := make([]byte, 32-len(buf.Bytes()))
-		//log.Info("LUYIN", "err", err, "buf", buf.Bytes(), "r32arr", append(padArr, buf.Bytes()...), "str", string(resp_body))
-		return append(padArr, buf.Bytes()...), nil
+		return buf.Bytes(), nil
 	} else {
 		binary.Write(buf, binary.BigEndian, uint32(0))
-		padArr := make([]byte, 32-len(buf.Bytes()))
-		return append(padArr, buf.Bytes()...), nil
+		return buf.Bytes(), nil
 	}
 
 }
@@ -426,13 +423,10 @@ func (c *verifyBurn) Run(inputRaw []byte) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	if string(resp_body) == "true" {
 		binary.Write(buf, binary.BigEndian, uint32(1))
-		padArr := make([]byte, 32-len(buf.Bytes()))
-		//log.Info("LUYIN", "err", err, "buf", buf.Bytes(), "r32arr", append(padArr, buf.Bytes()...), "str", string(resp_body))
-		return append(padArr, buf.Bytes()...), nil
+		return buf.Bytes(), nil
 	} else {
 		binary.Write(buf, binary.BigEndian, uint32(0))
-		padArr := make([]byte, 32-len(buf.Bytes()))
-		return append(padArr, buf.Bytes()...), nil
+		return buf.Bytes(), nil
 	}
 
 }
