@@ -15,7 +15,6 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -122,13 +121,14 @@ func (api *PublicZetherAPI) ReadBalance(CBytes [2][2]common.Hash, xHash common.H
 	return 0, errors.New("Balance decryption failed!")
 }
 
-func computeU(input string, xBytes common.Hash) bn256.G1 { // could also conceivably just return the raw bytes...
+func mapInto(input string, i uint64) *bn256.G1 { // urgent: messed with this, not tested.
+	// meant to mimic the functionality of group.mapInto(ProofUtils.paddedHash(input, i))
 	p := hexutil.MustDecodeBig("0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47") // field order
-	x := new(big.Int)
-	x.SetBytes(xBytes.Bytes())
 
 	seed := new(big.Int)
-	seed.SetBytes(crypto.Keccak256([]byte(input)))
+	buf := make([]byte, 32)
+	binary.PutUvarint(buf, i)
+	seed.SetBytes(crypto.Keccak256([]byte(input), buf))
 	seed.Mod(seed, p)
 	y := new(big.Int)
 	for {
@@ -144,11 +144,11 @@ func computeU(input string, xBytes common.Hash) bn256.G1 { // could also conceiv
 	copy(yBytes[32-len(y.Bytes()):], y.Bytes())          // right-justify
 	result := new(bn256.G1)
 	result.Unmarshal(append(seedBytes, yBytes...))
-	result.ScalarMult(result, x)
-	return *result
+	// result.ScalarMult(result, x)
+	return result
 }
 
-func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2]common.Hash, yBytes [][2]common.Hash, epoch uint64, x common.Hash, bTransfer uint64, bDiff uint64, index []uint64) (map[string]interface{}, error) {
+func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2]common.Hash, yBytes [][2]common.Hash, epoch uint64, xBytes common.Hash, bTransfer uint64, bDiff uint64, index []uint64) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
 	myRand := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -172,7 +172,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	q.Add("CR", CR.String())
 	q.Add("y", y.String())
 	q.Add("epoch", hexutil.EncodeUint64(epoch))
-	q.Add("x", hexutil.Encode(x.Bytes()))
+	q.Add("x", hexutil.Encode(xBytes.Bytes()))
 	q.Add("r", common.BytesToHash(r.Bytes()).Hex())
 	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
 	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
@@ -212,7 +212,11 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	if err != nil {
 		return nil, err
 	}
-	u := computeU("Zether "+strconv.FormatUint(epoch, 10), x)
+	x := new(big.Int)
+	x.SetBytes(xBytes.Bytes())
+
+	u := mapInto("Zether", epoch)
+	u.ScalarMult(u, x)
 	result["L"] = L
 	result["R"] = [2]common.Hash{common.BytesToHash(R.Marshal()[:32]), common.BytesToHash(R.Marshal()[32:])}
 	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
@@ -222,7 +226,7 @@ func (api *PublicZetherAPI) ProveTransfer(CLBytes [][2]common.Hash, CRBytes [][2
 	return result, nil
 }
 
-func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer uint64, epoch uint64, x common.Hash, bDiff uint64) (map[string]interface{}, error) {
+func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2]common.Hash, bTransfer uint64, epoch uint64, xBytes common.Hash, bDiff uint64) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
 	bTransferBytes := make([]byte, 32)
@@ -238,7 +242,7 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	q.Add("y", hexutil.Encode(append(y[0].Bytes(), y[1].Bytes()...)))
 	q.Add("bTransfer", hexutil.EncodeUint64(bTransfer))
 	q.Add("epoch", hexutil.EncodeUint64(epoch))
-	q.Add("x", hexutil.Encode(x.Bytes()))
+	q.Add("x", hexutil.Encode(xBytes.Bytes()))
 	q.Add("bDiff", hexutil.EncodeUint64(bDiff))
 
 	resp, err := http.PostForm("http://localhost:8080/prove-burn", q)
@@ -249,7 +253,11 @@ func (api *PublicZetherAPI) ProveBurn(CL [2]common.Hash, CR [2]common.Hash, y [2
 	defer resp.Body.Close()
 	proof := string(resp_body)
 
-	u := computeU("Zether "+strconv.FormatUint(epoch, 10), x)
+	x := new(big.Int)
+	x.SetBytes(xBytes.Bytes())
+
+	u := mapInto("Zether", epoch)
+	u.ScalarMult(u, x)
 	result["u"] = [2]common.Hash{common.BytesToHash(u.Marshal()[:32]), common.BytesToHash(u.Marshal()[32:])}
 	result["proof"] = proof
 
