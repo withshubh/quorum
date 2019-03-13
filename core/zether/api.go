@@ -126,9 +126,9 @@ func mapInto(input string, i uint64) *bn256.G1 { // urgent: messed with this, no
 	p := hexutil.MustDecodeBig("0x30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47") // field order
 
 	seed := new(big.Int)
-	buf := make([]byte, 32)
-	binary.PutUvarint(buf, i)
-	seed.SetBytes(crypto.Keccak256([]byte(input), buf))
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, i) // will cause failures if epoch is > 32 bits but < 64 bits.
+	seed.SetBytes(crypto.Keccak256([]byte(input), make([]byte, 24), buf))
 	seed.Mod(seed, p)
 	y := new(big.Int)
 	for {
@@ -142,9 +142,9 @@ func mapInto(input string, i uint64) *bn256.G1 { // urgent: messed with this, no
 	yBytes := make([]byte, 32)
 	copy(seedBytes[32-len(seed.Bytes()):], seed.Bytes()) // right-justify
 	copy(yBytes[32-len(y.Bytes()):], y.Bytes())          // right-justify
+
 	result := new(bn256.G1)
 	result.Unmarshal(append(seedBytes, yBytes...))
-	// result.ScalarMult(result, x)
 	return result
 }
 
