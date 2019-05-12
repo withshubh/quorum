@@ -64,27 +64,6 @@ func (api *PublicZetherAPI) CreateAccount() (map[string]interface{}, error) {
 	return result, nil
 }
 
-func (api *PublicZetherAPI) Add(aBytes [2][2]common.Hash, bBytes [2][2]common.Hash) [2][2]common.Hash {
-	// adds two elemengs of G x G.
-	aL := new(bn256.G1)
-	aL.Unmarshal(append(aBytes[0][0].Bytes(), aBytes[0][1].Bytes()...))
-	aR := new(bn256.G1)
-	aR.Unmarshal(append(aBytes[1][0].Bytes(), aBytes[1][1].Bytes()...))
-	bL := new(bn256.G1)
-	bL.Unmarshal(append(bBytes[0][0].Bytes(), bBytes[0][1].Bytes()...))
-	bR := new(bn256.G1)
-	bR.Unmarshal(append(bBytes[1][0].Bytes(), bBytes[1][1].Bytes()...))
-
-	resultL := new(bn256.G1)
-	resultL.Add(aL, bL)
-	resultR := new(bn256.G1)
-	resultR.Add(aR, bR)
-	resultLBytes := resultL.Marshal()
-	resultRBytes := resultR.Marshal()
-
-	return [2][2]common.Hash{{common.BytesToHash(resultLBytes[:32]), common.BytesToHash(resultLBytes[32:])}, {common.BytesToHash(resultRBytes[:32]), common.BytesToHash(resultRBytes[32:])}}
-}
-
 func (api *PublicZetherAPI) ReadBalance(CBytes [2][2]common.Hash, xHash common.Hash, start int64, endInt int64) (int64, error) {
 	// no longer checking whether start >= 0.
 	if endInt > big.MaxPrec {
