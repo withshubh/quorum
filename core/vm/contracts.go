@@ -18,6 +18,7 @@ package vm
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"math/big"
 
@@ -57,6 +58,15 @@ var PrecompiledContractsByzantium = map[common.Address]PrecompiledContract{
 	common.BytesToAddress([]byte{6}): &bn256Add{},
 	common.BytesToAddress([]byte{7}): &bn256ScalarMul{},
 	common.BytesToAddress([]byte{8}): &bn256Pairing{},
+}
+
+func AppendQuorumPrecompiledContracts(m map[common.Address]PrecompiledContract, vmContext *Context) map[common.Address]PrecompiledContract {
+	new := make(map[common.Address]PrecompiledContract)
+	for addr, precompile := range m {
+		new[addr] = precompile // copies the reference only!
+	}
+	new[common.BytesToAddress([]byte{0x01, 0x00, 0x01})] = &nanoTime{getNano: vmContext.GetNano}
+	return new
 }
 
 // RunPrecompiledContract runs and evaluates the output of a precompiled contract.
@@ -357,4 +367,25 @@ func (c *bn256Pairing) Run(input []byte) ([]byte, error) {
 		return true32Byte, nil
 	}
 	return false32Byte, nil
+}
+
+var (
+	errMissingKey = errors.New("requested block header not found")
+)
+
+type nanoTime struct {
+	getNano GetNanoFunc
+}
+
+func (c *nanoTime) RequiredGas(input []byte) uint64 {
+	return params.NanoTimeGas
+}
+
+func (c *nanoTime) Run(input []byte) ([]byte, error) {
+	number := binary.BigEndian.Uint64(input[len(input)-8:])
+	result := c.getNano(number)
+	if result != (common.Hash{}) {
+		return result[:], nil
+	}
+	return nil, errMissingKey
 }

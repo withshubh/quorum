@@ -38,6 +38,15 @@ var (
 	EmptyUncleHash = CalcUncleHash(nil)
 )
 
+var (
+	ExtraVanity uint64 = 32 // Fixed number of extra-data prefix bytes reserved for arbitrary signer vanity
+	ExtraDataLen uint64 = 10 // length of extraDataBytes, the RLP-encoding of a struct which can contain arbitrary data (e.g., nano time).
+	ExtraSealLen uint64 = 72 // length of extraSealBytes returned by buildExtraSeal
+)
+type ExtraData struct {
+	NanoTime []byte // I will big-endian encode this as an 8-byte uint64.
+}
+
 // A BlockNonce is a 64-bit hash which proves (combined with the
 // mix-hash) that a sufficient amount of computation has been carried
 // out on a block.

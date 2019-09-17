@@ -81,6 +81,22 @@ func NewSimulatedBackend(alloc core.GenesisAlloc, gasLimit uint64) *SimulatedBac
 	return backend
 }
 
+func NanoSimulatedBackend(alloc core.GenesisAlloc, gasLimit uint64) *SimulatedBackend {
+	database := ethdb.NewMemDatabase()
+	genesis := core.Genesis{Config: params.EthashRaftSeconds, GasLimit: gasLimit, Alloc: alloc}
+	genesis.MustCommit(database)
+	blockchain, _ := core.NewBlockChain(database, nil, genesis.Config, ethash.NewFullFaker(), vm.Config{}, nil)
+
+	backend := &SimulatedBackend{
+		database:   database,
+		blockchain: blockchain,
+		config:     genesis.Config,
+		events:     filters.NewEventSystem(new(event.TypeMux), &filterBackend{database, blockchain}, false),
+	}
+	backend.rollback()
+	return backend
+}
+
 // Commit imports all the pending transactions as a single block and starts a
 // fresh new state.
 func (b *SimulatedBackend) Commit() {

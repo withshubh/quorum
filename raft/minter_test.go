@@ -1,12 +1,13 @@
 package raft
 
 import (
+	"encoding/binary"
+	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"math/big"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/node"
@@ -27,6 +28,7 @@ func TestSignHeader(t *testing.T) {
 	//create some fake header to sign
 	fakeParentHash := common.HexToHash("0xc2c1dc1be8054808c69e06137429899d")
 
+	now := time.Now()
 	header := &types.Header{
 		ParentHash: fakeParentHash,
 		Number:     big.NewInt(1),
@@ -34,29 +36,38 @@ func TestSignHeader(t *testing.T) {
 		GasLimit:   uint64(0),
 		GasUsed:    uint64(0),
 		Coinbase:   minter.coinbase,
-		Time:       big.NewInt(time.Now().UnixNano()),
+		Time:       big.NewInt(now.Unix()),
 	}
 
 	headerHash := header.Hash()
-	extraDataBytes := minter.buildExtraSeal(headerHash)
+	nanotime := make([]byte, 8)
+	binary.BigEndian.PutUint64(nanotime, uint64(now.UnixNano()))
+	extraData := &types.ExtraData{NanoTime: nanotime}
+	extraDataBytes, err := rlp.EncodeToBytes(extraData)
+	if err != nil {
+		t.Errorf("RLP encoding of extra data struct failed!")
+	}
+	extraSealBytes := minter.buildExtraSeal(headerHash, extraDataBytes)
 	var seal *extraSeal
-	err := rlp.DecodeBytes(extraDataBytes[:], &seal)
+	err = rlp.DecodeBytes(extraSealBytes[:], &seal)
 	if err != nil {
 		t.Fatalf("Unable to decode seal: %s", err.Error())
 	}
 
 	// Check raftId
-	sealRaftId, err := hexutil.DecodeUint64("0x" + string(seal.RaftId)) //add the 0x prefix
-	if err != nil {
-		t.Errorf("Unable to get RaftId: %s", err.Error())
-	}
-	if sealRaftId != uint64(testRaftId) {
+	sealRaftId := binary.LittleEndian.Uint16(seal.RaftId)
+	if sealRaftId != testRaftId {
 		t.Errorf("RaftID does not match. Expected: %d, Actual: %d", testRaftId, sealRaftId)
 	}
 
 	//Identify who signed it
 	sig := seal.Signature
-	pubKey, err := crypto.SigToPub(headerHash.Bytes(), sig)
+	hw := sha3.NewKeccak256()
+	hw.Write(headerHash.Bytes()) // write the header hash
+	hw.Write(extraDataBytes) // write the extra data
+	var total common.Hash
+	hw.Sum(total[:])
+	pubKey, err := crypto.SigToPub(total.Bytes(), sig)
 	if err != nil {
 		t.Fatalf("Unable to get public key from signature: %s", err.Error())
 	}

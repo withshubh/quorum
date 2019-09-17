@@ -17,7 +17,9 @@
 package raft
 
 import (
+	"encoding/binary"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto/sha3"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -25,7 +27,6 @@ import (
 
 	"github.com/eapache/channels"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -37,10 +38,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-)
-
-var (
-	extraVanity = 32 // Fixed number of extra-data prefix bytes reserved for arbitrary signer vanity
 )
 
 // Current state information for building the next block
@@ -240,23 +237,21 @@ func (minter *minter) mintingLoop() {
 	}
 }
 
-func generateNanoTimestamp(parent *types.Block) (tstamp int64) {
-	parentTime := parent.Time().Int64()
-	tstamp = time.Now().UnixNano()
-
-	if parentTime >= tstamp {
-		// Each successive block needs to be after its predecessor.
-		tstamp = parentTime + 1
-	}
-
-	return
-}
-
 // Assumes mu is held.
-func (minter *minter) createWork() *work {
+func (minter *minter) createWork() (*work, int64) {
 	parent := minter.speculativeChain.head
 	parentNumber := parent.Number()
-	tstamp := generateNanoTimestamp(parent)
+	parentTime := parent.Time().Int64()
+	now := time.Now()
+	var tstamp int64
+	if minter.config.RaftSeconds {
+		tstamp = now.Unix()
+	} else { // integrating `generateNanoTimestamp` into the body of `createWork`, because we need `now` below.
+		tstamp = now.UnixNano()
+		if parentTime >= tstamp {
+			tstamp = parentTime + 1
+		}
+	}
 
 	header := &types.Header{
 		ParentHash: parent.Hash(),
@@ -266,6 +261,7 @@ func (minter *minter) createWork() *work {
 		GasUsed:    0,
 		Coinbase:   minter.coinbase,
 		Time:       big.NewInt(tstamp),
+		Extra:      make([]byte, types.ExtraVanity+types.ExtraDataLen+types.ExtraSealLen),
 	}
 
 	publicState, privateState, err := minter.chain.StateAt(parent.Root())
@@ -278,7 +274,7 @@ func (minter *minter) createWork() *work {
 		publicState:  publicState,
 		privateState: privateState,
 		header:       header,
-	}
+	}, now.UnixNano()
 }
 
 func (minter *minter) getTransactions() *types.TransactionsByPriceAndNonce {
@@ -310,8 +306,18 @@ func (minter *minter) mintNewBlock() {
 	minter.mu.Lock()
 	defer minter.mu.Unlock()
 
-	work := minter.createWork()
+	work, tstamp := minter.createWork()
 	transactions := minter.getTransactions()
+	header := work.header
+
+	nanotime := make([]byte, 8)
+	binary.BigEndian.PutUint64(nanotime, uint64(tstamp))
+	extraData := &types.ExtraData{NanoTime: nanotime}
+	extraDataBytes, err := rlp.EncodeToBytes(extraData)
+	if err != nil {
+		log.Warn("RLP encoding of extra data struct failed!")
+	}
+	copy(header.Extra[types.ExtraVanity:], extraDataBytes) // crucial that this be done before commitTransactions
 
 	committedTxes, publicReceipts, privateReceipts, logs := work.commitTransactions(transactions, minter.chain)
 	txCount := len(committedTxes)
@@ -322,8 +328,6 @@ func (minter *minter) mintNewBlock() {
 	}
 
 	minter.firePendingBlockEvents(logs)
-
-	header := work.header
 
 	// commit state root after all state transitions.
 	ethash.AccumulateRewards(minter.chain.Config(), work.publicState, header, nil)
@@ -340,12 +344,9 @@ func (minter *minter) mintNewBlock() {
 	}
 
 	//Sign the block and build the extraSeal struct
-	extraSealBytes := minter.buildExtraSeal(headerHash)
-
-	// add vanity and seal to header
-	// NOTE: leaving vanity blank for now as a space for any future data
-	header.Extra = make([]byte, extraVanity+len(extraSealBytes))
-	copy(header.Extra[extraVanity:], extraSealBytes)
+	extraSealBytes := minter.buildExtraSeal(headerHash, extraDataBytes)
+	// add seal to header
+	copy(header.Extra[types.ExtraVanity+types.ExtraDataLen:], extraSealBytes)
 
 	block := types.NewBlock(header, committedTxes, nil, publicReceipts)
 
@@ -425,28 +426,36 @@ func (env *work) commitTransaction(tx *types.Transaction, bc *core.BlockChain, g
 	return publicReceipt, privateReceipt, nil
 }
 
-func (minter *minter) buildExtraSeal(headerHash common.Hash) []byte {
+func (minter *minter) buildExtraSeal(headerHash common.Hash, extraDataBytes []byte) []byte {
+	//build the full hash
+	hw := sha3.NewKeccak256()
+	hw.Write(headerHash.Bytes()) // write the header hash
+	hw.Write(extraDataBytes) // write the extra data
+
+	var total common.Hash
+	hw.Sum(total[:])
 	//Sign the headerHash
 	nodeKey := minter.eth.nodeKey
-	sig, err := crypto.Sign(headerHash.Bytes(), nodeKey)
+	sig, err := crypto.Sign(total.Bytes(), nodeKey)
 	if err != nil {
 		log.Warn("Block sealing failed", "err", err)
 	}
 
 	//build the extraSeal struct
-	raftIdString := hexutil.EncodeUint64(uint64(minter.eth.raftProtocolManager.raftId))
+	raftIdBytes := make([]byte, 2)
+	binary.LittleEndian.PutUint16(raftIdBytes, minter.eth.raftProtocolManager.raftId)
 
 	var extra extraSeal
 	extra = extraSeal{
-		RaftId:    []byte(raftIdString[2:]), //remove the 0x prefix
+		RaftId:    raftIdBytes,
 		Signature: sig,
 	}
 
 	//encode to byte array for storage
-	extraDataBytes, err := rlp.EncodeToBytes(extra)
+	extraSealBytes, err := rlp.EncodeToBytes(extra)
 	if err != nil {
 		log.Warn("Header.Extra Data Encoding failed", "err", err)
 	}
 
-	return extraDataBytes
+	return extraSealBytes
 }

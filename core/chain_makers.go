@@ -17,7 +17,9 @@
 package core
 
 import (
+	"encoding/binary"
 	"fmt"
+	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -177,7 +179,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	chainreader := &fakeChainReader{config: config}
 	genblock := func(i int, parent *types.Block, statedb *state.StateDB) (*types.Block, types.Receipts) {
 		b := &BlockGen{i: i, chain: blocks, parent: parent, statedb: statedb, config: config, engine: engine}
-		b.header = makeHeader(chainreader, parent, statedb, b.engine)
+		b.header = makeHeader(config, chainreader, parent, statedb, b.engine)
 
 		// Mutate the state and block according to any hard-fork specs
 		if daoBlock := config.DAOForkBlock; daoBlock != nil {
@@ -224,12 +226,22 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 	return blocks, receipts
 }
 
-func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.StateDB, engine consensus.Engine) *types.Header {
+func makeHeader(config *params.ChainConfig, chain consensus.ChainReader, parent *types.Block, state *state.StateDB, engine consensus.Engine) *types.Header {
 	var time *big.Int
 	if parent.Time() == nil {
 		time = big.NewInt(10)
 	} else {
 		time = new(big.Int).Add(parent.Time(), big.NewInt(10)) // block time is fixed at 10 seconds
+	}
+
+	extra := make([]byte, types.ExtraVanity)
+	if config.RaftSeconds {
+		nanotime := make([]byte, 8)
+		binary.BigEndian.PutUint64(nanotime, time.Uint64() * 1000000000)
+		extraData := &types.ExtraData{NanoTime: nanotime}
+		extra = make([]byte, types.ExtraVanity + types.ExtraDataLen)
+		extraDataBytes, _ := rlp.EncodeToBytes(extraData)
+		copy(extra[types.ExtraVanity:], extraDataBytes)
 	}
 
 	return &types.Header{
@@ -245,6 +257,7 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 		GasLimit: CalcGasLimit(parent, parent.GasLimit(), parent.GasLimit()),
 		Number:   new(big.Int).Add(parent.Number(), common.Big1),
 		Time:     time,
+		Extra:    extra,
 	}
 }
 

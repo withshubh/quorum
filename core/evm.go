@@ -17,6 +17,7 @@
 package core
 
 import (
+	"github.com/ethereum/go-ethereum/rlp"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -48,6 +49,7 @@ func NewEVMContext(msg Message, header *types.Header, chain ChainContext, author
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,
 		GetHash:     GetHashFn(header, chain),
+		GetNano:     GetNanoFn(header, chain),
 		Origin:      msg.From(),
 		Coinbase:    beneficiary,
 		BlockNumber: new(big.Int).Set(header.Number),
@@ -60,27 +62,55 @@ func NewEVMContext(msg Message, header *types.Header, chain ChainContext, author
 
 // GetHashFn returns a GetHashFunc which retrieves header hashes by number
 func GetHashFn(ref *types.Header, chain ChainContext) func(n uint64) common.Hash {
-	var cache map[uint64]common.Hash
-
+	// in the original GetHashFn, the passed-in element `ref` was NOT included in the list of headers considered.
+	// since our getHeaderFn below _does_ consider the most recent (non-strict inequality), we have to
+	// artificially bump `ref` up by one before passing it over to getHeaderFn to preserve semantics. --BD
 	return func(n uint64) common.Hash {
+		header := getHeaderFn(ref, chain)(n)
+		if header == nil || n == ref.Number.Uint64() {
+			return common.Hash{}
+		}
+		return header.Hash()
+	}
+}
+
+func GetNanoFn(ref *types.Header, chain ChainContext) func(n uint64) common.Hash {
+	return func(n uint64) common.Hash {
+		header := getHeaderFn(ref, chain)(n)
+		if header == nil {
+			return common.Hash{}
+		}
+		extraDataBytes := header.Extra[types.ExtraVanity:types.ExtraVanity+types.ExtraDataLen]
+		var extraData *types.ExtraData
+		if err := rlp.DecodeBytes(extraDataBytes, &extraData); err != nil {
+			return common.Hash{}
+		}
+		var result common.Hash
+		copy(result[24:], extraData.NanoTime)
+		return result
+	}
+}
+
+func getHeaderFn(ref *types.Header, chain ChainContext) func(n uint64) *types.Header {
+	var cache map[uint64]*types.Header
+
+	return func(n uint64) *types.Header {
 		// If there's no hash cache yet, make one
 		if cache == nil {
-			cache = map[uint64]common.Hash{
-				ref.Number.Uint64() - 1: ref.ParentHash,
-			}
+			cache = map[uint64]*types.Header{} // why not initialize it right away above? --BD
 		}
 		// Try to fulfill the request from the cache
-		if hash, ok := cache[n]; ok {
-			return hash
+		if header, ok := cache[n]; ok {
+			return header
 		}
 		// Not cached, iterate the blocks and cache the hashes
-		for header := chain.GetHeader(ref.ParentHash, ref.Number.Uint64()-1); header != nil; header = chain.GetHeader(header.ParentHash, header.Number.Uint64()-1) {
-			cache[header.Number.Uint64()-1] = header.ParentHash
-			if n == header.Number.Uint64()-1 {
-				return header.ParentHash
+		for header := ref; header != nil; header = chain.GetHeader(header.ParentHash, header.Number.Uint64()-1) {
+			cache[header.Number.Uint64()] = header
+			if n == header.Number.Uint64() {
+				return header
 			}
 		}
-		return common.Hash{}
+		return nil
 	}
 }
 

@@ -56,7 +56,6 @@ var (
 	// parent block's time and difficulty. The calculation uses the Byzantium rules.
 	// Specification EIP-649: https://eips.ethereum.org/EIPS/eip-649
 	calcDifficultyByzantium = makeDifficultyCalculator(big.NewInt(3000000))
-	nanosecond2017Timestamp = mustParseRfc3339("2017-01-01T00:00:00+00:00").UnixNano()
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -255,25 +254,9 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainReader, header, parent *
 		if header.Time.Cmp(math.MaxBig256) > 0 {
 			return errLargeBlockTime
 		}
-	} else if !chain.Config().IsQuorum {
+	} else {
 		if header.Time.Cmp(big.NewInt(time.Now().Add(allowedFutureBlockTime).Unix())) > 0 {
 			return consensus.ErrFutureBlock
-		}
-	} else {
-		// We disable future checking if we're in --raft mode. This is crucial
-		// because block validation in the raft setting needs to be deterministic.
-		// There is no forking of the chain, and we need each node to only perform
-		// validation as a pure function of block contents with respect to the
-		// previous database state.
-		//
-		// NOTE: whereas we are currently checking whether the timestamp field has
-		// nanosecond semantics to detect --raft mode, we could also use a special
-		// "raft" sentinel in the Extra field, or pass a boolean for raftMode from
-		// all call sites of this function.
-		if raftMode := time.Now().UnixNano() > nanosecond2017Timestamp; !raftMode {
-			if header.Time.Cmp(big.NewInt(time.Now().Unix())) > 0 {
-				return consensus.ErrFutureBlock
-			}
 		}
 	}
 	if header.Time.Cmp(parent.Time) <= 0 {

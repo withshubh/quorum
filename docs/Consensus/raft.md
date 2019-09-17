@@ -181,4 +181,40 @@ No. When a Raft log entry containing a new block is disregarded as a "no-op", it
 
 **What's the deal with the block timestamp being stored in nanoseconds (instead of seconds, like other consensus mechanisms)?**
 
-With raft-based consensus we can produce far more than one block per second, which vanilla Ethereum implicitly disallows (as the default timestamp resolution is in seconds and every block must have a timestamp greater than its parent). For Raft, we store the timestamp in nanoseconds and ensure it is incremented by at least 1 nanosecond per block.
+Standard Ethereum stipulates both that block times be reported in seconds _and_ that block times be distinct. Raft (which can produce far more than one block per second) clearly can't satisfy both of these properties simultaneously.
+
+By default, Raft reports block times in nanoseconds (violating the first property). Alternatively, the presence of `"raftSeconds": true` within the `"config": { ... }` block of the genesis file will instruct Raft to report block times in seconds (violating the second property). For many users, the failure of this second assumption may be less disruptive than that of the first.
+
+To deliver nanosecond-level information _even when_ `"raftSeconds": true` is enabled, we have added an addititonal precompile. An example of its usage is given below:
+
+```solidity
+contract NanoTime { // a wrapper around the precompile.
+    function timestamp() view external returns (uint256 result) {
+        uint256 number = block.number;
+        assembly {
+            let m := mload(0x40)
+            mstore(m, number)
+            if iszero(staticcall(gas, 0x010001, m, 0x20, m, 0x20)) {
+                revert(0, 0)
+            }
+            result := mload(m)
+        }
+    }
+}
+
+contract Example { // shows example usage behavior.
+    NanoTime nano = new NanoTime();
+    function Test() view external returns (uint256) {
+        uint256 temp = nano.timestamp();
+        require(temp != 0, "Failed!");
+        return temp;
+    }
+}
+```
+
+In web3, you can then run:
+
+```javascript
+> example.Test()
+1565656954903993000
+```
